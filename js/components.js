@@ -1,47 +1,47 @@
 /**
- * 🍰 Kawaii Bakery — A-Frame Components
+ * 🍰 Kawaii Bakery — A-Frame Components (FIXED)
  * components.js
  *
- * Defines reusable A-Frame components:
- *  - pickupable     : items the player can click to hold
- *  - drop-zone      : glowing target areas for placement
- *  - hover-glow     : visual feedback on cursor hover
+ * Fixes in this version:
+ *  - setEmissive() no longer touches materials that use the flat shader
+ *    (flat has no `emissive` property — this was the source of the endless
+ *    "Unknown property `emissive`" console warnings).
+ *  - drop-zone pulse animation now animates a REAL property
+ *    (material.emissiveIntensity on the .zone-visual child) instead of the
+ *    invalid "components.drop-zone.emissiveIntensity".
+ *  - desktop-interactor is disabled while in VR (controllers take over).
  */
+
+// Shared helper: only set emissive props on shaders that support them.
+function safeSetEmissive(el, color, intensity) {
+  try {
+    const mat = el.getAttribute && el.getAttribute('material');
+    if (!mat) return;
+    if (mat.shader && mat.shader === 'flat') return; // flat: no emissive
+    el.setAttribute('material', 'emissive', color);
+    el.setAttribute('material', 'emissiveIntensity', intensity);
+  } catch (e) {}
+}
 
 // ─────────────────────────────────────────────
 // PICKUPABLE COMPONENT
-// Makes an entity grabbable via cursor click
+// Makes an entity grabbable via cursor / laser click
 // ─────────────────────────────────────────────
 AFRAME.registerComponent('pickupable', {
   schema: {},
 
   init: function () {
-    // Save initial transform for possible return
     this.originalPos = this.el.getAttribute('position');
     this.originalRot = this.el.getAttribute('rotation');
-    this.isPlaced = false; // once placed correctly, becomes non-interactable
+    this.isPlaced = false;
 
-    // Helper: set visual feedback on the entity and its children.
     const setEmissive = (color, intensity) => {
-      // If the entity has a material, set it; also try children
-      try {
-        if (this.el.getAttribute('material')) {
-          this.el.setAttribute('material', 'emissive', color);
-          this.el.setAttribute('material', 'emissiveIntensity', intensity);
-        }
-      } catch (e) {}
-      // Iterate child meshes
-      this.el.querySelectorAll('*').forEach((ch) => {
-        try {
-          if (ch.getAttribute('material')) {
-            ch.setAttribute('material', 'emissive', color);
-            ch.setAttribute('material', 'emissiveIntensity', intensity);
-          }
-        } catch (e) {}
-      });
+      safeSetEmissive(this.el, color, intensity);
+      this.el.querySelectorAll('*').forEach((ch) => safeSetEmissive(ch, color, intensity));
     };
 
-    // Hover visuals: outline/glow using emissive and slight scale
+    // Hover visuals — works for BOTH the desktop cursor and VR laser-controls,
+    // since both emit mouseenter / mouseleave / click on intersected entities.
     this.enterHandler = () => {
       if (this.isPlaced) return;
       setEmissive('#ffaae0', 0.45);
@@ -49,7 +49,6 @@ AFRAME.registerComponent('pickupable', {
       this.el.setAttribute('animation__hover', {
         property: 'scale', from: '1 1 1', to: '1.08 1.08 1.08', dur: 180, easing: 'easeOutQuad'
       });
-      // show pointer cursor for desktop
       this.el.style.cursor = 'pointer';
     };
 
@@ -64,7 +63,10 @@ AFRAME.registerComponent('pickupable', {
     this.clickHandler = (e) => {
       if (this.isPlaced) return;
       e.stopPropagation();
-      window.bakeryGame.pickUpItem(this.el);
+      // In VR, e.detail.cursorEl is the controller that clicked — the held
+      // item should follow that controller instead of the camera.
+      const holder = (e.detail && e.detail.cursorEl) ? e.detail.cursorEl : null;
+      window.bakeryGame.pickUpItem(this.el, holder);
     };
 
     this.el.addEventListener('mouseenter', this.enterHandler);
@@ -73,7 +75,6 @@ AFRAME.registerComponent('pickupable', {
   },
 
   remove: function () {
-    // Clean up listeners when component removed
     this.el.removeEventListener('mouseenter', this.enterHandler);
     this.el.removeEventListener('mouseleave', this.leaveHandler);
     this.el.removeEventListener('click', this.clickHandler);
@@ -81,21 +82,17 @@ AFRAME.registerComponent('pickupable', {
 });
 
 // ─────────────────────────────────────────────
-// DESKTOP INTERACTOR
-// Ensures mouse clicks using the cursor + raycaster reliably
-// pick up interactable entities and place them into drop zones.
-// This centralizes click handling so child primitives or labels
-// won't block interaction.
+// DESKTOP INTERACTOR (desktop only — disabled in VR)
 // ─────────────────────────────────────────────
 AFRAME.registerComponent('desktop-interactor', {
   init: function () {
-    const cursorEl = this.el; // attach this component to the cursor entity
+    const cursorEl = this.el;
 
-    // On desktop mouse click, use the cursor's raycaster intersections
-    // to determine what was clicked and forward it to bakeryGame.
-    // Unified interaction handler usable by click/mousedown/touch and keyboard
     this.handleInteraction = (evt) => {
       try {
+        // In VR mode the controllers own interaction; ignore desktop events.
+        if (cursorEl.sceneEl && cursorEl.sceneEl.is('vr-mode')) return;
+
         const rc = cursorEl.components && cursorEl.components.raycaster;
         if (!rc) return;
         const ints = rc.intersections;
@@ -103,7 +100,6 @@ AFRAME.registerComponent('desktop-interactor', {
           const hit = ints[0].object && ints[0].object.el;
           if (!hit) return;
 
-          // Find nearest ancestor with class 'interactable' or 'drop-zone'.
           let el = hit;
           while (el && el !== cursorEl.sceneEl) {
             const cls = el.getAttribute && el.getAttribute('class');
@@ -128,7 +124,6 @@ AFRAME.registerComponent('desktop-interactor', {
             return;
           }
         } else {
-          // No raycaster hit — treat as drop-back if holding an item
           if (window.bakeryGame && window.bakeryGame.heldItem) {
             window.bakeryGame.returnToOriginalSpot(window.bakeryGame.heldItem);
           }
@@ -138,12 +133,10 @@ AFRAME.registerComponent('desktop-interactor', {
       }
     };
 
-    // Listen for click/mousedown/touchstart so trackpad taps and presses are handled
     window.addEventListener('click', this.handleInteraction, true);
     window.addEventListener('mousedown', this.handleInteraction, true);
     window.addEventListener('touchstart', this.handleInteraction, { capture: true, passive: true });
 
-    // Keyboard support: pressing 'E' will trigger pickup/place at the current cursor ray
     this.onKey = (ev) => {
       if (ev.key && (ev.key === 'e' || ev.key === 'E')) {
         this.handleInteraction(ev);
@@ -161,7 +154,6 @@ AFRAME.registerComponent('desktop-interactor', {
 
 // ─────────────────────────────────────────────
 // DROP-ZONE COMPONENT
-// A glowing target area where items can be placed
 // ─────────────────────────────────────────────
 AFRAME.registerComponent('drop-zone', {
   schema: {},
@@ -170,19 +162,25 @@ AFRAME.registerComponent('drop-zone', {
     this.filled = false;
     this.zoneType = this.el.getAttribute('zone-type');
 
-    // Pulse animation for zone visibility
-    this.el.setAttribute('animation__pulse', {
-      property: 'components.drop-zone.emissiveIntensity',
-      from: 0.3,
-      to: 0.7,
-      dur: 1200,
-      dir: 'alternate',
-      loop: true,
-      easing: 'easeInOutSine',
-    });
+    // FIX: pulse the zone-visual's REAL material.emissiveIntensity property.
+    // Children may not exist yet when this component initializes (zones
+    // created from JS), so defer until the entity has loaded.
+    const startPulse = () => {
+      const visual = this.el.querySelector('.zone-visual');
+      if (!visual) return;
+      visual.setAttribute('animation__pulse', {
+        property: 'material.emissiveIntensity',
+        from: 0.3,
+        to: 0.7,
+        dur: 1200,
+        dir: 'alternate',
+        loop: true,
+        easing: 'easeInOutSine',
+      });
+    };
+    if (this.el.hasLoaded) setTimeout(startPulse, 0);
+    else this.el.addEventListener('loaded', () => setTimeout(startPulse, 0));
 
-    // Hover
-    // When hovering over a zone while holding an item, give visual feedback
     this.enterZone = (e) => {
       if (this.filled) return;
       const heldItem = window.bakeryGame && window.bakeryGame.heldItem;
@@ -201,7 +199,6 @@ AFRAME.registerComponent('drop-zone', {
       if (this.filled) return;
       const visual = this.el.querySelector('.zone-visual');
       if (visual) {
-        // Reset to gentle pastel by zone type
         const zoneColors = {
           croissant:  '#ffb830', pastry: '#ff60b0', bread: '#e08820', dish: '#60c0ff', decoration: '#ff60b0'
         };
@@ -211,7 +208,6 @@ AFRAME.registerComponent('drop-zone', {
       }
     };
 
-    // Click on zone attempts a placement
     this.clickZone = (e) => {
       if (this.filled) return;
       e.stopPropagation();
@@ -223,17 +219,16 @@ AFRAME.registerComponent('drop-zone', {
     this.el.addEventListener('click', this.clickZone);
   },
 
-  // Called when zone is filled
   setFilled: function () {
     this.filled = true;
     const visual = this.el.querySelector('.zone-visual');
     if (visual) {
+      visual.removeAttribute('animation__pulse');
       visual.setAttribute('material', 'color', '#aaffcc');
       visual.setAttribute('material', 'emissive', '#00ff88');
       visual.setAttribute('material', 'emissiveIntensity', 0.6);
       visual.setAttribute('material', 'opacity', 0.4);
     }
-    // Gentle scale pulse to confirm
     this.el.setAttribute('animation__confirm', {
       property: 'scale',
       from: '1 1 1',
@@ -245,7 +240,6 @@ AFRAME.registerComponent('drop-zone', {
     });
   },
   remove: function () {
-    // Remove listeners
     this.el.removeEventListener('mouseenter', this.enterZone);
     this.el.removeEventListener('mouseleave', this.leaveZone);
     this.el.removeEventListener('click', this.clickZone);
