@@ -91,11 +91,16 @@ window.addEventListener('DOMContentLoaded', () => {
       el.setAttribute('position', z.pos);
       el.setAttribute('drop-zone', '');
 
+      // Invisible raycast-hit geometry on the parent so cursor/laser events
+      // fire on the .drop-zone entity (where the drop-zone component listens).
+      el.setAttribute('geometry', 'primitive: box; width: 0.8; height: 0.12; depth: 0.32');
+      el.setAttribute('material', 'opacity: 0; transparent: true; shader: flat');
+
       const box = document.createElement('a-box');
       box.setAttribute('width', '0.75');
       box.setAttribute('height', '0.07');
       box.setAttribute('depth', '0.28');
-      box.setAttribute('class', 'zone-visual drop-zone');
+      box.setAttribute('class', 'zone-visual');
       // FIX: no "shader: flat" together with emissive
       box.setAttribute('material',
         'color: #ffd0e8; opacity: 0.5; transparent: true; emissive: #ff80c0; emissiveIntensity: 0.45');
@@ -380,6 +385,12 @@ window.addEventListener('DOMContentLoaded', () => {
         ent.setAttribute('ammo-body', 'type: kinematic; emitCollisionEvents: true');
         ent.setAttribute('ammo-shape', 'type: box; fit: manual; halfExtents: 0.12 0.1 0.12');
 
+        // Invisible collision geometry so raycasters can hit the parent entity
+        // directly (not just child meshes). This lets cursor/laser fire events
+        // on the .interactable entity where pickupable listens.
+        ent.setAttribute('geometry', 'primitive: box; width: 0.28; height: 0.24; depth: 0.28');
+        ent.setAttribute('material', 'opacity: 0; transparent: true; shader: flat');
+
         const visual = buildVisual(def.type);
         ent.appendChild(visual);
 
@@ -393,13 +404,7 @@ window.addEventListener('DOMContentLoaded', () => {
         };
 
         scene.appendChild(ent);
-        // FIX (grabbing): the actual MESHES live on child primitives, but the
-        // raycaster selector only matched the empty parent wrapper. Tag every
-        // descendant as .interactable too so controller/cursor lasers hit the
-        // real geometry. game.js resolves any clicked child back to the item
-        // root via closest('[item-type]').
         ent.querySelectorAll('*').forEach((child) => {
-          child.classList.add('interactable');
           child.addEventListener('click', forwardClick);
         });
 
@@ -420,21 +425,5 @@ window.addEventListener('DOMContentLoaded', () => {
 
     window.BAKERY_TOTAL_ITEMS = created;
     console.log('[items.js] created', created, 'items across', slotIdx, 'unique slots');
-
-    // FIX (grabbing): force every raycaster (both controllers + desktop
-    // cursor) to rebuild its target list now that all items exist. Without
-    // this, a raycaster that initialized before the items were appended can
-    // keep a stale (empty) object list and the laser passes straight through.
-    const refreshRaycasters = () => {
-      document.querySelectorAll('[raycaster]').forEach((rcEl) => {
-        const rc = rcEl.components && rcEl.components.raycaster;
-        if (rc && typeof rc.refreshObjects === 'function') rc.refreshObjects();
-      });
-      console.log('[items.js] raycasters refreshed');
-    };
-    setTimeout(refreshRaycasters, 0);
-    setTimeout(refreshRaycasters, 1500); // again after controllers connect
-    scene.addEventListener('controllerconnected', () => setTimeout(refreshRaycasters, 100));
-    scene.emit('bakery-items-ready');
   });
 });
