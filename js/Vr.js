@@ -41,6 +41,7 @@ AFRAME.registerComponent('xr-gamepad', {
     this.triggerPressed = false;
     this.lastX = 0;
     this.lastY = 0;
+    this._logged = false; // one-time debug log
   },
 
   tick: function () {
@@ -63,21 +64,27 @@ AFRAME.registerComponent('xr-gamepad', {
 
     var gp = source.gamepad;
 
+    // One-time debug log to show gamepad layout
+    if (!this._logged) {
+      this._logged = true;
+      console.log('[xr-gamepad] ' + this.data.hand + ' connected — axes:', gp.axes.length,
+        'buttons:', gp.buttons.length, 'profiles:', source.profiles);
+    }
+
     // ── Thumbstick axes ─────────────────────────────────────────
-    // WebXR standard gamepad mapping:
-    //   axes[0] = touchpad X (if present), axes[1] = touchpad Y
-    //   axes[2] = thumbstick X, axes[3] = thumbstick Y
-    // Quest controllers only have a thumbstick, reported at [2],[3].
-    var axisX = gp.axes.length > 2 ? (gp.axes[2] || 0) : (gp.axes[0] || 0);
-    var axisY = gp.axes.length > 3 ? (gp.axes[3] || 0) : (gp.axes[1] || 0);
+    // Quest 3 may report thumbstick at [0,1] or [2,3] depending on runtime.
+    // Sum both pairs — the unused pair is always 0, so this works either way.
+    var axisX = (gp.axes[0] || 0) + (gp.axes.length > 2 ? (gp.axes[2] || 0) : 0);
+    var axisY = (gp.axes[1] || 0) + (gp.axes.length > 3 ? (gp.axes[3] || 0) : 0);
     if (axisX !== this.lastX || axisY !== this.lastY) {
       this.lastX = axisX;
       this.lastY = axisY;
       this.el.emit('thumbstickmoved', { x: axisX, y: axisY }, false);
     }
 
-    // ── Grip / Squeeze button (index 2 in WebXR standard) ───────
-    var gripBtn = gp.buttons.length > 2 ? gp.buttons[2] : gp.buttons[1];
+    // ── Grip / Squeeze button ────────────────────────────────────
+    // Quest Touch: buttons[1] = grip/squeeze
+    var gripBtn = gp.buttons[1];
     if (gripBtn) {
       if (gripBtn.pressed && !this.gripPressed) {
         this.gripPressed = true;
