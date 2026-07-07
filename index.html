@@ -8,11 +8,21 @@
   <!-- A-Frame core -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
-  <!-- Ammo.js physics for A-Frame (loads Ammo WASM + A-Frame bindings) -->
+  <!--
+    FIX #1: "AmmoModule is not a function"
+    aframe-physics-system does NOT bundle Ammo.js. The Ammo WASM build must be
+    loaded BEFORE the physics system script. This is the exact build the
+    aframe-physics-system docs specify.
+  -->
+  <script src="https://cdn.jsdelivr.net/gh/MozillaReality/ammo.js@8bbc0ea/builds/ammo.wasm.js"></script>
+
+  <!-- Ammo.js physics bindings for A-Frame -->
   <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system@4.0.1/dist/aframe-physics-system.min.js"></script>
 
-  <!-- Game components -->
+  <!-- Game components (must load before the scene is parsed) -->
   <script src="js/components.js"></script>
+  <!-- VR: controllers, locomotion, snap-turn, grab (NEW) -->
+  <script src="js/vr.js"></script>
 
   <style>
     body { margin: 0; overflow: hidden; background: #ffe0f0; font-family: 'Comic Sans MS', cursive; }
@@ -66,7 +76,7 @@
       position: fixed; bottom: 20px; right: 20px;
       background: rgba(255,192,203,0.9); border: 2px solid #ff9ab5;
       border-radius: 15px; padding: 12px 16px; font-size: 12px;
-      color: #a0004a; pointer-events: none; max-width: 200px;
+      color: #a0004a; pointer-events: none; max-width: 220px;
     }
     #instructions strong { display: block; margin-bottom: 6px; font-size: 13px; color: #c0006a; }
     @keyframes bounce { from { transform: scale(1) rotate(-2deg); } to { transform: scale(1.06) rotate(2deg); } }
@@ -98,10 +108,15 @@
   <div id="holding-indicator">🤲 Holding: <span id="holding-name">nothing</span> — Click a glowing zone to place!</div>
   <div id="instructions">
     <strong>🌸 How to Play</strong>
-    WASD — Move<br>
-    Mouse / Trackpad — Look around<br>
-    Click item — Pick up (or press <strong>E</strong>)<br>
-    Click pink zone — Place item (or press <strong>E</strong>)<br>
+    <u>Desktop</u><br>
+    WASD — Move · Mouse — Look<br>
+    Click / <strong>E</strong> — Pick up & place<br>
+    <br>
+    <u>VR (Quest)</u><br>
+    Left stick — Move<br>
+    Right stick — Snap turn 45°<br>
+    Trigger — Pick up / place<br>
+    Grip — Grab · release to throw!<br>
     <br>
     Tidy the bakery! ✨
   </div>
@@ -119,25 +134,31 @@
 </div>
 
 <!-- ═══════════ A-FRAME SCENE ═══════════
-     physics="driver: ammo; gravity: -9.8; debug: false"
-     enables Ammo.js rigid-body physics for all entities that carry
-     ammo-body + ammo-shape attributes.
+     physics="driver: ammo" enables Ammo.js rigid-body physics.
+     FIX #2: every ammo-shape below now declares "fit: manual" because we
+     supply explicit halfExtents. Without it the shape defaults to FIT.ALL,
+     which requires a loaded mesh and threw
+     "Cannot use FIT.ALL without object3DMap.mesh".
 -->
 <a-scene
   physics="driver: ammo; gravity: -9.8; debug: false"
   background="color: #ffe4f3"
   fog="type: linear; color: #ffe4f3; near: 12; far: 28"
   vr-mode-ui="enabled: true"
+  vr-mode-manager
   renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true">
 
   <a-assets></a-assets>
 
-  <!-- ═══════════ CAMERA + PLAYER ═══════════ -->
+  <!-- ═══════════ CAMERA RIG + PLAYER ═══════════
+       The rig (#player) is what moves in VR — never the camera itself.
+       Desktop: wasd-controls + look-controls (unchanged).
+       VR: thumbstick-locomotion (left stick) + snap-turn (right stick). -->
   <a-entity id="player"
     position="0 0 3.5"
-    movement-controls="fly: false; speed: 0.08"
     wasd-controls="acceleration: 25">
     <a-entity camera
+      id="head"
       look-controls="pointerLockEnabled: true"
       position="0 1.65 0">
       <a-entity cursor
@@ -148,6 +169,24 @@
         raycaster="objects: .interactable, .drop-zone; far: 6; interval: 30"
         desktop-interactor>
       </a-entity>
+    </a-entity>
+
+    <!-- VR CONTROLLERS (NEW)
+         laser-controls auto-detects Quest Touch controllers and shows the
+         correct model + laser only when a controller is present, so desktop
+         mode is unaffected. Trigger fires standard A-Frame 'click' events on
+         intersected entities, so all existing click gameplay works in VR. -->
+    <a-entity id="leftHand"
+      laser-controls="hand: left"
+      raycaster="objects: .interactable, .drop-zone; far: 6; lineColor: #ff6eb0; lineOpacity: 0.8"
+      thumbstick-locomotion="speed: 2.2"
+      vr-grab>
+    </a-entity>
+    <a-entity id="rightHand"
+      laser-controls="hand: right"
+      raycaster="objects: .interactable, .drop-zone; far: 6; lineColor: #ff9ad4; lineOpacity: 0.8"
+      snap-turn="degrees: 45"
+      vr-grab>
     </a-entity>
   </a-entity>
 
@@ -162,24 +201,24 @@
   <!-- Floor — static physics body so items don't fall through -->
   <a-plane position="0 0 0" rotation="-90 0 0" width="12" height="12"
     material="color: #ffd6ea; roughness: 0.8" shadow="receive: true"
-    ammo-body="type: static" ammo-shape="type: box; halfExtents: 6 0.01 6"></a-plane>
+    ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 6 0.01 6"></a-plane>
   <a-plane position="0 0.001 0" rotation="-90 0 0" width="12" height="12"
     material="color: #ffadd4; wireframe: true; opacity: 0.15; shader: flat"></a-plane>
 
   <!-- Walls -->
   <a-box position="0 2.5 -6"  width="12" height="5" depth="0.2"
     material="color: #fff0f8; roughness: 0.9"
-    ammo-body="type: static" ammo-shape="type: box; halfExtents: 6 2.5 0.1"></a-box>
+    ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 6 2.5 0.1"></a-box>
   <a-box position="-6 2.5 0"  width="0.2" height="5" depth="12"
     material="color: #ffe8f5; roughness: 0.9"
-    ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.1 2.5 6"></a-box>
+    ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.1 2.5 6"></a-box>
   <a-box position="6 2.5 0"   width="0.2" height="5" depth="12"
     material="color: #ffe8f5; roughness: 0.9"
-    ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.1 2.5 6"></a-box>
+    ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.1 2.5 6"></a-box>
   <a-box position="0 5 0"     width="12" height="0.2" depth="12"
     material="color: #fff5fb; roughness: 0.9"></a-box>
 
-  <!-- Ceiling lights -->
+  <!-- Ceiling lights (emissive works: default standard shader) -->
   <a-box position="-2 4.85 -2" width="1.5" height="0.05" depth="1.5"
     material="color: #fff9e6; emissive: #fff9c4; emissiveIntensity: 0.6"></a-box>
   <a-box position="2 4.85 -2"  width="1.5" height="0.05" depth="1.5"
@@ -193,18 +232,18 @@
 
   <!-- ═══════════ FURNITURE (all static physics) ═══════════ -->
 
-  <!-- Display Counter — static collider on the counter top surface -->
+  <!-- Display Counter -->
   <a-entity position="0 0 -1.5">
     <a-box position="0 0.55 0"   width="5" height="1.1" depth="0.9"
       material="color: #f5c6d8; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 2.5 0.55 0.45"></a-box>
-    <!-- Glass top (visual only — collider is the box above) -->
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.5 0.55 0.45"></a-box>
+    <!-- Glass top (visual only) -->
     <a-box position="0 1.12 0"   width="5" height="0.06" depth="0.9"
       material="color: #d4f5ff; opacity: 0.5; transparent: true; roughness: 0.1"></a-box>
-    <!-- Counter top physics surface (thin slab at y=1.12) -->
+    <!-- Counter top physics surface -->
     <a-box position="0 1.12 0" width="5" height="0.06" depth="0.9"
       material="opacity: 0; transparent: true; shader: flat"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 2.5 0.03 0.45"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.5 0.03 0.45"></a-box>
     <a-cylinder position="-2.3 0.2 -0.35" radius="0.06" height="0.4" material="color: #e8a0b8"></a-cylinder>
     <a-cylinder position=" 2.3 0.2 -0.35" radius="0.06" height="0.4" material="color: #e8a0b8"></a-cylinder>
     <a-cylinder position="-2.3 0.2  0.35" radius="0.06" height="0.4" material="color: #e8a0b8"></a-cylinder>
@@ -214,24 +253,22 @@
     <a-sphere position="1.5 0.6 0.46"  radius="0.07" material="color: #ff6eb0; emissive: #ff6eb0; emissiveIntensity: 0.3"></a-sphere>
   </a-entity>
 
-  <!-- Main Bakery Shelf (back wall) — shelves are static physics surfaces -->
+  <!-- Main Bakery Shelf (back wall) -->
   <a-entity id="main-shelf" position="0 0 -5.7">
     <a-box position="0 2.1 0"    width="5.5" height="4.2" depth="0.15" material="color: #f0b8cc; roughness: 0.7"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 2.75 2.1 0.075"></a-box>
-    <!-- Shelf planks — each gets a static physics body so items rest on them -->
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.75 2.1 0.075"></a-box>
     <a-box position="0 0.8 0.15" width="5.2" height="0.08" depth="0.45" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 2.6 0.04 0.225"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.6 0.04 0.225"></a-box>
     <a-box position="0 1.7 0.15" width="5.2" height="0.08" depth="0.45" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 2.6 0.04 0.225"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.6 0.04 0.225"></a-box>
     <a-box position="0 2.6 0.15" width="5.2" height="0.08" depth="0.45" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 2.6 0.04 0.225"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.6 0.04 0.225"></a-box>
     <a-box position="0 3.5 0.15" width="5.2" height="0.08" depth="0.45" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 2.6 0.04 0.225"></a-box>
-    <!-- Side panels -->
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.6 0.04 0.225"></a-box>
     <a-box position="-2.6 2.1 0.15" width="0.1" height="4.2" depth="0.45" material="color: #e090a8; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.05 2.1 0.225"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.05 2.1 0.225"></a-box>
     <a-box position=" 2.6 2.1 0.15" width="0.1" height="4.2" depth="0.45" material="color: #e090a8; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.05 2.1 0.225"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.05 2.1 0.225"></a-box>
     <a-sphere position="-2.6 3.9 0.15" radius="0.12" material="color: #ff6eb0; emissive: #ff4d9a; emissiveIntensity: 0.4"></a-sphere>
     <a-sphere position=" 2.6 3.9 0.15" radius="0.12" material="color: #ff6eb0; emissive: #ff4d9a; emissiveIntensity: 0.4"></a-sphere>
   </a-entity>
@@ -240,7 +277,7 @@
   <a-entity position="-4 0 -4.5">
     <a-box position="0 1.0 0"    width="1.6" height="2" depth="1.4"
       material="color: #f9d0e0; roughness: 0.5"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.8 1.0 0.7"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.8 1.0 0.7"></a-box>
     <a-box position="0 0.8 0.71"  width="1.2" height="1" depth="0.05"  material="color: #ffc2d4; roughness: 0.3"></a-box>
     <a-box position="0 0.85 0.77" width="0.7" height="0.55" depth="0.02" material="color: #b8e8ff; opacity: 0.7; transparent: true; roughness: 0.1"></a-box>
     <a-box position="0 0.85 0.74" width="0.65" height="0.5" depth="0.01" material="color: #ffd580; emissive: #ffb830; emissiveIntensity: 0.6; opacity: 0.5; transparent: true"></a-box>
@@ -249,7 +286,7 @@
     <a-cylinder position="0.35 1.65 0.72"  radius="0.07" height="0.06" rotation="90 0 0" material="color: #ff9ab5"></a-cylinder>
     <a-box position="0 1.15 0.76" width="0.9" height="0.07" depth="0.07" material="color: #c0506a; roughness: 0.4"></a-box>
     <a-box position="0 2.02 0"    width="1.6" height="0.04" depth="1.4" material="color: #e0a0b8; roughness: 0.4"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.8 0.02 0.7"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.8 0.02 0.7"></a-box>
     <a-cylinder position="-0.35 2.06 -0.2" radius="0.22" height="0.03" material="color: #cc7090; emissive: #992050; emissiveIntensity: 0.2"></a-cylinder>
     <a-cylinder position="0.35 2.06  0.2"  radius="0.22" height="0.03" material="color: #cc7090; emissive: #992050; emissiveIntensity: 0.2"></a-cylinder>
   </a-entity>
@@ -258,13 +295,13 @@
   <a-entity id="sink-entity" position="4.5 0 -4">
     <a-box position="0 0.55 0"  width="1.8" height="1.1" depth="1.2"
       material="color: #f0c8dc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.9 0.55 0.6"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.9 0.55 0.6"></a-box>
     <a-box position="0 1.0 0"   width="1.4" height="0.12" depth="0.9" material="color: #d8f0f8; roughness: 0.2"></a-box>
     <a-box position="0 0.88 0"  width="1.2" height="0.25" depth="0.7" material="color: #c8e8f5; opacity: 0.7; transparent: true"></a-box>
     <!-- Sink top surface physics -->
     <a-box position="0 1.06 0" width="1.4" height="0.06" depth="0.9"
       material="opacity: 0; transparent: true; shader: flat"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.7 0.03 0.45"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.7 0.03 0.45"></a-box>
     <a-cylinder position="0 1.35 -0.3"    radius="0.04" height="0.5"  material="color: #c0a0b0; metalness: 0.8; roughness: 0.2"></a-cylinder>
     <a-cylinder position="0 1.62 -0.18"   radius="0.035" height="0.32" rotation="70 0 0" material="color: #c0a0b0; metalness: 0.8; roughness: 0.2"></a-cylinder>
     <a-cylinder position="-0.25 1.2 -0.35" radius="0.06" height="0.06" material="color: #ff9ab5; roughness: 0.4"></a-cylinder>
@@ -273,11 +310,11 @@
     <a-box position="0 1.9 -0.56" width="1.7" height="1.5" depth="0.02" material="color: #ffb3d9; wireframe: true; opacity: 0.4; shader: flat"></a-box>
   </a-entity>
 
-  <!-- Prep Table — static physics for table top -->
+  <!-- Prep Table -->
   <a-entity position="-2 0 0.5">
     <a-box position="0 0.9 0"  width="2" height="0.08" depth="1.2"
       material="color: #fce0ec; roughness: 0.5"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 1 0.04 0.6"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 1 0.04 0.6"></a-box>
     <a-cylinder position="-0.85 0.44 -0.5" radius="0.05" height="0.88" material="color: #e8a8bc"></a-cylinder>
     <a-cylinder position=" 0.85 0.44 -0.5" radius="0.05" height="0.88" material="color: #e8a8bc"></a-cylinder>
     <a-cylinder position="-0.85 0.44  0.5" radius="0.05" height="0.88" material="color: #e8a8bc"></a-cylinder>
@@ -288,13 +325,13 @@
   <a-entity position="5.85 0 -1">
     <a-box position="0 2.0 0"    width="0.15" height="3" depth="1.8"
       material="color: #f0b8cc; roughness: 0.7"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.075 1.5 0.9"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.075 1.5 0.9"></a-box>
     <a-box position="-0.08 1.0 0" width="0.05" height="0.08" depth="1.6" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.025 0.04 0.8"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.025 0.04 0.8"></a-box>
     <a-box position="-0.08 2.0 0" width="0.05" height="0.08" depth="1.6" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.025 0.04 0.8"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.025 0.04 0.8"></a-box>
     <a-box position="-0.08 3.0 0" width="0.05" height="0.08" depth="1.6" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; halfExtents: 0.025 0.04 0.8"></a-box>
+      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.025 0.04 0.8"></a-box>
   </a-entity>
 
   <!-- ═══════════ AMBIENT DECOR ═══════════ -->
@@ -313,54 +350,59 @@
     <a-sphere   position="0.08 0.68 0.08" radius="0.1"          material="color: #c0f0b0; roughness: 0.8"></a-sphere>
   </a-entity>
 
-  <!-- Floating sparkles -->
+  <!-- Floating sparkles
+       FIX #3: removed "shader: flat" (flat shader has no emissive property
+       and caused the "Unknown property emissive" console warnings). -->
   <a-entity id="sparkles">
-    <a-sphere position="-1 2.5 -3"  radius="0.03" material="color: #ffdfff; emissive: #ffaaff; emissiveIntensity: 1; shader: flat" animation="property: position; to: -1 2.8 -3; dur: 2000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
-    <a-sphere position="1 3 -2"     radius="0.025" material="color: #ffffaa; emissive: #ffffaa; emissiveIntensity: 1; shader: flat" animation="property: position; to: 1 3.3 -2; dur: 2500; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
-    <a-sphere position="2.5 2.2 -4" radius="0.03" material="color: #ffd6ff; emissive: #ffaaff; emissiveIntensity: 1; shader: flat" animation="property: position; to: 2.5 2.6 -4; dur: 1800; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
-    <a-sphere position="-3 2.8 -1"  radius="0.02" material="color: #afffdd; emissive: #aaffcc; emissiveIntensity: 1; shader: flat" animation="property: position; to: -3 3.1 -1; dur: 3000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+    <a-sphere position="-1 2.5 -3"  radius="0.03" material="color: #ffdfff; emissive: #ffaaff; emissiveIntensity: 1" animation="property: position; to: -1 2.8 -3; dur: 2000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+    <a-sphere position="1 3 -2"     radius="0.025" material="color: #ffffaa; emissive: #ffffaa; emissiveIntensity: 1" animation="property: position; to: 1 3.3 -2; dur: 2500; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+    <a-sphere position="2.5 2.2 -4" radius="0.03" material="color: #ffd6ff; emissive: #ffaaff; emissiveIntensity: 1" animation="property: position; to: 2.5 2.6 -4; dur: 1800; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+    <a-sphere position="-3 2.8 -1"  radius="0.02" material="color: #afffdd; emissive: #aaffcc; emissiveIntensity: 1" animation="property: position; to: -3 3.1 -1; dur: 3000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
   </a-entity>
 
-  <!-- ═══════════ DROP ZONES ═══════════ -->
+  <!-- ═══════════ DROP ZONES ═══════════
+       FIX #3 (cont.): zone visuals previously used "shader: flat" together
+       with emissive — flat shader doesn't support emissive. Removed flat so
+       the glow works and the warnings stop. -->
 
   <!-- 🥐 Croissants — shelf row 1 left -->
   <a-entity id="zone-croissant" class="drop-zone" zone-type="croissant" position="-1.5 0.9 -5.48" drop-zone>
     <a-box width="0.8" height="0.08" depth="0.3"
-      material="color: #ffd080; opacity: 0.5; transparent: true; emissive: #ffb830; emissiveIntensity: 0.4; shader: flat"
+      material="color: #ffd080; opacity: 0.5; transparent: true; emissive: #ffb830; emissiveIntensity: 0.4"
       class="zone-visual" id="zone-croissant-visual"></a-box>
-    <a-text value="🥐 Croissants" align="center" position="0 0.25 0" width="4" color="#c06000" shader="flat"></a-text>
+    <a-text value="🥐 Croissants" align="center" position="0 0.25 0" width="4" color="#c06000"></a-text>
   </a-entity>
 
   <!-- 🍰 Pastries — shelf row 1 right -->
   <a-entity id="zone-pastry" class="drop-zone" zone-type="pastry" position="1.5 0.9 -5.48" drop-zone>
     <a-box width="0.8" height="0.08" depth="0.3"
-      material="color: #ffaadd; opacity: 0.5; transparent: true; emissive: #ff60b0; emissiveIntensity: 0.4; shader: flat"
+      material="color: #ffaadd; opacity: 0.5; transparent: true; emissive: #ff60b0; emissiveIntensity: 0.4"
       class="zone-visual" id="zone-pastry-visual"></a-box>
-    <a-text value="🍰 Pastries" align="center" position="0 0.25 0" width="4" color="#c0006a" shader="flat"></a-text>
+    <a-text value="🍰 Pastries" align="center" position="0 0.25 0" width="4" color="#c0006a"></a-text>
   </a-entity>
 
   <!-- 🍞 Bread — shelf row 2 centre -->
   <a-entity id="zone-bread" class="drop-zone" zone-type="bread" position="0 1.78 -5.48" drop-zone>
     <a-box width="0.8" height="0.08" depth="0.3"
-      material="color: #ffc880; opacity: 0.5; transparent: true; emissive: #e08820; emissiveIntensity: 0.4; shader: flat"
+      material="color: #ffc880; opacity: 0.5; transparent: true; emissive: #e08820; emissiveIntensity: 0.4"
       class="zone-visual" id="zone-bread-visual"></a-box>
-    <a-text value="🍞 Bread" align="center" position="0 0.25 0" width="4" color="#804000" shader="flat"></a-text>
+    <a-text value="🍞 Bread" align="center" position="0 0.25 0" width="4" color="#804000"></a-text>
   </a-entity>
 
   <!-- 🧼 Sink washing zone -->
   <a-entity id="zone-sink" class="drop-zone" zone-type="dirty-dish" position="4.5 1.05 -4" drop-zone>
     <a-box width="1.2" height="0.06" depth="0.7"
-      material="color: #aaddff; opacity: 0.5; transparent: true; emissive: #60c0ff; emissiveIntensity: 0.4; shader: flat"
+      material="color: #aaddff; opacity: 0.5; transparent: true; emissive: #60c0ff; emissiveIntensity: 0.4"
       class="zone-visual" id="zone-sink-visual"></a-box>
-    <a-text value="🧼 Wash Here" align="center" position="0 0.25 0" width="4" color="#0060a0" shader="flat"></a-text>
+    <a-text value="🧼 Wash Here" align="center" position="0 0.25 0" width="4" color="#0060a0"></a-text>
   </a-entity>
 
   <!-- 🎀 Decoration shelf (right wall) -->
   <a-entity id="zone-deco" class="drop-zone" zone-type="decoration" position="5.77 3.08 -1" drop-zone>
     <a-box width="0.08" height="0.08" depth="1.4"
-      material="color: #ffaadd; opacity: 0.5; transparent: true; emissive: #ff60b0; emissiveIntensity: 0.5; shader: flat"
+      material="color: #ffaadd; opacity: 0.5; transparent: true; emissive: #ff60b0; emissiveIntensity: 0.5"
       class="zone-visual" id="zone-deco-visual"></a-box>
-    <a-text value="🎀 Decor" align="center" position="-0.3 0.25 0" width="4" color="#c0006a" shader="flat" rotation="0 -90 0"></a-text>
+    <a-text value="🎀 Decor" align="center" position="-0.3 0.25 0" width="4" color="#c0006a" rotation="0 -90 0"></a-text>
   </a-entity>
 
 </a-scene>
