@@ -91,6 +91,11 @@ window.addEventListener('DOMContentLoaded', () => {
       el.setAttribute('position', z.pos);
       el.setAttribute('drop-zone', '');
 
+      // Invisible raycast-hit geometry on the parent so cursor/laser events
+      // fire on the .drop-zone entity (where the drop-zone component listens).
+      el.setAttribute('geometry', 'primitive: box; width: 0.8; height: 0.12; depth: 0.32');
+      el.setAttribute('material', 'opacity: 0; transparent: true; shader: flat');
+
       const box = document.createElement('a-box');
       box.setAttribute('width', '0.75');
       box.setAttribute('height', '0.07');
@@ -379,6 +384,12 @@ window.addEventListener('DOMContentLoaded', () => {
         // "Cannot use FIT.ALL without object3DMap.mesh".
         ent.setAttribute('ammo-body', 'type: kinematic; emitCollisionEvents: true');
         ent.setAttribute('ammo-shape', 'type: box; fit: manual; halfExtents: 0.12 0.1 0.12');
+
+        // Invisible collision geometry so raycasters can hit the parent entity
+        // directly (not just child meshes). This lets cursor/laser fire events
+        // on the .interactable entity where pickupable listens.
+        ent.setAttribute('geometry', 'primitive: box; width: 0.28; height: 0.24; depth: 0.28');
+        ent.setAttribute('material', 'opacity: 0; transparent: true; shader: flat');
 
         const visual = buildVisual(def.type);
         ent.appendChild(visual);

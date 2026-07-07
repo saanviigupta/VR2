@@ -166,24 +166,26 @@
         position="0 0 -1"
         geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.018"
         material="color: #ff6eb0; shader: flat; opacity: 0.9"
-        raycaster="objects: .interactable, .interactable *, .drop-zone, .drop-zone *; far: 6; interval: 30"
+        raycaster="objects: .interactable, .drop-zone; far: 6; interval: 30"
         desktop-interactor>
       </a-entity>
     </a-entity>
 
     <!-- VR CONTROLLERS
-         quest-controller directly polls WebXR input sources each frame,
-         bypassing A-Frame's controller-detection (which can miss Quest 3).
-         Raycaster targets .interactable descendants so child meshes register. -->
+         laser-controls provides pose tracking, controller model, laser, and
+         trigger→click. xr-gamepad adds reliable thumbstick/grip event polling
+         for Quest 3 (whose profile string may not be in A-Frame 1.5.0). -->
     <a-entity id="leftHand"
-      quest-controller="hand: left; lineColor: #ff6eb0"
-      raycaster="objects: .interactable, .interactable *, .drop-zone, .drop-zone *; far: 6; interval: 30"
+      laser-controls="hand: left"
+      raycaster="objects: .interactable, .drop-zone; far: 6; interval: 30"
+      xr-gamepad="hand: left"
       thumbstick-locomotion="speed: 2.2"
       vr-grab>
     </a-entity>
     <a-entity id="rightHand"
-      quest-controller="hand: right; lineColor: #ff9ad4"
-      raycaster="objects: .interactable, .interactable *, .drop-zone, .drop-zone *; far: 6; interval: 30"
+      laser-controls="hand: right"
+      raycaster="objects: .interactable, .drop-zone; far: 6; interval: 30"
+      xr-gamepad="hand: right"
       snap-turn="degrees: 45"
       vr-grab>
     </a-entity>
@@ -365,7 +367,9 @@
        the glow works and the warnings stop. -->
 
   <!-- 🥐 Croissants — shelf row 1 left -->
-  <a-entity id="zone-croissant" class="drop-zone" zone-type="croissant" position="-1.5 0.9 -5.48" drop-zone>
+  <a-entity id="zone-croissant" class="drop-zone" zone-type="croissant" position="-1.5 0.9 -5.48" drop-zone
+    geometry="primitive: box; width: 0.85; height: 0.12; depth: 0.35"
+    material="opacity: 0; transparent: true; shader: flat">
     <a-box width="0.8" height="0.08" depth="0.3"
       material="color: #ffd080; opacity: 0.5; transparent: true; emissive: #ffb830; emissiveIntensity: 0.4"
       class="zone-visual" id="zone-croissant-visual"></a-box>
@@ -373,7 +377,9 @@
   </a-entity>
 
   <!-- 🍰 Pastries — shelf row 1 right -->
-  <a-entity id="zone-pastry" class="drop-zone" zone-type="pastry" position="1.5 0.9 -5.48" drop-zone>
+  <a-entity id="zone-pastry" class="drop-zone" zone-type="pastry" position="1.5 0.9 -5.48" drop-zone
+    geometry="primitive: box; width: 0.85; height: 0.12; depth: 0.35"
+    material="opacity: 0; transparent: true; shader: flat">
     <a-box width="0.8" height="0.08" depth="0.3"
       material="color: #ffaadd; opacity: 0.5; transparent: true; emissive: #ff60b0; emissiveIntensity: 0.4"
       class="zone-visual" id="zone-pastry-visual"></a-box>
@@ -381,7 +387,9 @@
   </a-entity>
 
   <!-- 🍞 Bread — shelf row 2 centre -->
-  <a-entity id="zone-bread" class="drop-zone" zone-type="bread" position="0 1.78 -5.48" drop-zone>
+  <a-entity id="zone-bread" class="drop-zone" zone-type="bread" position="0 1.78 -5.48" drop-zone
+    geometry="primitive: box; width: 0.85; height: 0.12; depth: 0.35"
+    material="opacity: 0; transparent: true; shader: flat">
     <a-box width="0.8" height="0.08" depth="0.3"
       material="color: #ffc880; opacity: 0.5; transparent: true; emissive: #e08820; emissiveIntensity: 0.4"
       class="zone-visual" id="zone-bread-visual"></a-box>
@@ -389,7 +397,9 @@
   </a-entity>
 
   <!-- 🧼 Sink washing zone -->
-  <a-entity id="zone-sink" class="drop-zone" zone-type="dirty-dish" position="4.5 1.05 -4" drop-zone>
+  <a-entity id="zone-sink" class="drop-zone" zone-type="dirty-dish" position="4.5 1.05 -4" drop-zone
+    geometry="primitive: box; width: 1.25; height: 0.1; depth: 0.75"
+    material="opacity: 0; transparent: true; shader: flat">
     <a-box width="1.2" height="0.06" depth="0.7"
       material="color: #aaddff; opacity: 0.5; transparent: true; emissive: #60c0ff; emissiveIntensity: 0.4"
       class="zone-visual" id="zone-sink-visual"></a-box>
@@ -397,7 +407,9 @@
   </a-entity>
 
   <!-- 🎀 Decoration shelf (right wall) -->
-  <a-entity id="zone-deco" class="drop-zone" zone-type="decoration" position="5.77 3.08 -1" drop-zone>
+  <a-entity id="zone-deco" class="drop-zone" zone-type="decoration" position="5.77 3.08 -1" drop-zone
+    geometry="primitive: box; width: 0.12; height: 0.12; depth: 1.45"
+    material="opacity: 0; transparent: true; shader: flat">
     <a-box width="0.08" height="0.08" depth="1.4"
       material="color: #ffaadd; opacity: 0.5; transparent: true; emissive: #ff60b0; emissiveIntensity: 0.5"
       class="zone-visual" id="zone-deco-visual"></a-box>

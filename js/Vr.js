@@ -1,121 +1,83 @@
 /**
- * 🍰 Kawaii Bakery — VR Support (v2 — Quest 3 direct WebXR)
+ * 🍰 Kawaii Bakery — VR Support (v3 — laser-controls + xr-gamepad)
  * vr.js
  *
- * Bypasses A-Frame's controller-detection pipeline (laser-controls →
- * hand-controls → oculus-touch-controls) which can fail on Quest 3 because
- * the "Meta Quest Touch Plus" profile string isn't in A-Frame 1.5.0's
- * allowlist.
+ * Architecture:
+ *  - laser-controls     : A-Frame's built-in controller handling. Provides
+ *                          pose tracking, controller model, visible laser,
+ *                          and trigger→click on intersected entities.
+ *  - xr-gamepad         : Lightweight WebXR gamepad poller. Reads thumbstick
+ *                          axes and grip/trigger buttons directly from
+ *                          XRInputSource.gamepad each frame, emitting named
+ *                          events (thumbstickmoved, gripdown, gripup, etc.)
+ *                          that our locomotion/grab components listen for.
+ *                          This ensures input works even if laser-controls
+ *                          can't map Quest 3's controller profile to a
+ *                          specific named component like oculus-touch-controls.
+ *  - thumbstick-locomotion : smooth movement with LEFT joystick.
+ *  - snap-turn           : RIGHT joystick 45° snap turn.
+ *  - vr-grab             : GRIP button grab + throw.
+ *  - vr-mode-manager     : toggles desktop cursor on/off when entering/exiting VR.
  *
- * Instead, `quest-controller` directly polls XRInputSources each frame:
- *  • Updates entity pose from targetRaySpace (correct pointing direction).
- *  • Reads thumbstick axes and emits 'thumbstickmoved'.
- *  • Reads grip/trigger buttons and emits gripdown/gripup/triggerdown/triggerup.
- *  • On triggerdown fires 'click' on the first raycaster intersection (replaces
- *    the cursor behaviour that laser-controls provided).
- *  • Draws a visible laser line.
- *
- * The existing thumbstick-locomotion, snap-turn, and vr-grab components listen
- * for the same events as before — no changes needed there.
+ * Items and drop-zones have invisible raycast-hit geometry on their parent
+ * entities (.interactable / .drop-zone) so the raycaster can target them
+ * directly and cursor/laser events fire on the correct entity.
  */
 
 /* ─────────────────────────────────────────────
- * QUEST-CONTROLLER — Direct WebXR input polling
+ * XR-GAMEPAD — Direct WebXR gamepad polling
+ *
+ * Emits: thumbstickmoved, gripdown, gripup, triggerdown, triggerup
+ * on the entity each frame when button/axis state changes.
+ * Works alongside laser-controls (which handles pose + model + click).
  * ───────────────────────────────────────────── */
-AFRAME.registerComponent('quest-controller', {
+AFRAME.registerComponent('xr-gamepad', {
   schema: {
-    hand:      { type: 'string', default: 'left' },
-    lineColor: { type: 'color',  default: '#ff6eb0' },
+    hand: { type: 'string', default: 'left' },
   },
 
   init: function () {
-    this.inputSource = null;
-
-    // Button state tracking (to emit press/release edges)
     this.gripPressed    = false;
     this.triggerPressed = false;
-
-    // Thumbstick state for change detection
     this.lastX = 0;
     this.lastY = 0;
-
-    // Visual: controller pointer (small sphere) + laser line
-    this.el.setAttribute('visible', false); // hidden until XR connects
-
-    // Pointer ball
-    const ball = document.createElement('a-sphere');
-    ball.setAttribute('radius', '0.015');
-    ball.setAttribute('material', 'color: ' + this.data.lineColor + '; shader: flat');
-    ball.classList.add('controller-visual');
-    this.el.appendChild(ball);
-
-    // Laser line (drawn via THREE.Line for efficiency)
-    const lineMat = new THREE.LineBasicMaterial({
-      color: new THREE.Color(this.data.lineColor),
-      transparent: true,
-      opacity: 0.75,
-    });
-    const lineGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, -6),
-    ]);
-    this._line = new THREE.Line(lineGeo, lineMat);
-    this.el.object3D.add(this._line);
   },
 
   tick: function () {
-    const scene  = this.el.sceneEl;
-    const renderer = scene.renderer;
-    if (!renderer || !renderer.xr || !renderer.xr.isPresenting) {
-      if (this.el.getAttribute('visible')) this.el.setAttribute('visible', false);
-      return;
-    }
+    var renderer = this.el.sceneEl.renderer;
+    if (!renderer || !renderer.xr || !renderer.xr.isPresenting) return;
 
-    const session = renderer.xr.getSession();
+    var session = renderer.xr.getSession();
     if (!session) return;
 
-    // Find the XRInputSource that matches our hand
-    let source = null;
-    for (const s of session.inputSources) {
-      if (s.handedness === this.data.hand && s.targetRaySpace) {
-        source = s;
+    // Find input source matching our hand
+    var source = null;
+    var inputSources = session.inputSources;
+    for (var i = 0; i < inputSources.length; i++) {
+      if (inputSources[i].handedness === this.data.hand) {
+        source = inputSources[i];
         break;
       }
     }
-    if (!source) {
-      if (this.el.getAttribute('visible')) this.el.setAttribute('visible', false);
-      return;
-    }
-    if (!this.el.getAttribute('visible')) this.el.setAttribute('visible', true);
+    if (!source || !source.gamepad) return;
 
-    // ── Pose update ─────────────────────────────────────────────
-    const frame    = scene.frame; // A-Frame stores the current XRFrame here
-    const refSpace = renderer.xr.getReferenceSpace();
-    if (frame && refSpace && source.targetRaySpace) {
-      const pose = frame.getPose(source.targetRaySpace, refSpace);
-      if (pose) {
-        const p = pose.transform.position;
-        const q = pose.transform.orientation;
-        this.el.object3D.position.set(p.x, p.y, p.z);
-        this.el.object3D.quaternion.set(q.x, q.y, q.z, q.w);
-      }
-    }
+    var gp = source.gamepad;
 
-    // ── Gamepad input ───────────────────────────────────────────
-    const gp = source.gamepad;
-    if (!gp) return;
-
-    // Thumbstick axes — standard mapping: axes[2]=X, axes[3]=Y
-    const axisX = gp.axes[2] || gp.axes[0] || 0;
-    const axisY = gp.axes[3] || gp.axes[1] || 0;
+    // ── Thumbstick axes ─────────────────────────────────────────
+    // WebXR standard gamepad mapping:
+    //   axes[0] = touchpad X (if present), axes[1] = touchpad Y
+    //   axes[2] = thumbstick X, axes[3] = thumbstick Y
+    // Quest controllers only have a thumbstick, reported at [2],[3].
+    var axisX = gp.axes.length > 2 ? (gp.axes[2] || 0) : (gp.axes[0] || 0);
+    var axisY = gp.axes.length > 3 ? (gp.axes[3] || 0) : (gp.axes[1] || 0);
     if (axisX !== this.lastX || axisY !== this.lastY) {
       this.lastX = axisX;
       this.lastY = axisY;
       this.el.emit('thumbstickmoved', { x: axisX, y: axisY }, false);
     }
 
-    // Grip button (index 2 in standard gamepad mapping, fall back to 1)
-    const gripBtn = gp.buttons[2] || gp.buttons[1];
+    // ── Grip / Squeeze button (index 2 in WebXR standard) ───────
+    var gripBtn = gp.buttons.length > 2 ? gp.buttons[2] : gp.buttons[1];
     if (gripBtn) {
       if (gripBtn.pressed && !this.gripPressed) {
         this.gripPressed = true;
@@ -126,54 +88,16 @@ AFRAME.registerComponent('quest-controller', {
       }
     }
 
-    // Trigger button (index 0)
-    const trigBtn = gp.buttons[0];
+    // ── Trigger button (index 0) ────────────────────────────────
+    var trigBtn = gp.buttons[0];
     if (trigBtn) {
       if (trigBtn.pressed && !this.triggerPressed) {
         this.triggerPressed = true;
         this.el.emit('triggerdown', {}, false);
-        this._fireCursorClick();
       } else if (!trigBtn.pressed && this.triggerPressed) {
         this.triggerPressed = false;
         this.el.emit('triggerup', {}, false);
       }
-    }
-  },
-
-  /**
-   * Simulate what laser-controls + cursor does: on trigger press, fire 'click'
-   * on the entity the raycaster is intersecting.
-   */
-  _fireCursorClick: function () {
-    const rc = this.el.components.raycaster;
-    if (!rc) return;
-    const els = rc.intersectedEls;
-    if (!els || !els.length) return;
-
-    // Walk up ancestors to find the actual interactable / drop-zone entity
-    let target = null;
-    for (const hit of els) {
-      let node = hit;
-      while (node && node !== this.el.sceneEl) {
-        if (node.classList &&
-            (node.classList.contains('interactable') || node.classList.contains('drop-zone'))) {
-          target = node;
-          break;
-        }
-        node = node.parentElement;
-      }
-      if (target) break;
-    }
-    if (target) {
-      target.emit('click', { cursorEl: this.el, intersection: null }, false);
-    }
-  },
-
-  remove: function () {
-    if (this._line) {
-      this.el.object3D.remove(this._line);
-      this._line.geometry.dispose();
-      this._line.material.dispose();
     }
   },
 });
@@ -183,7 +107,7 @@ AFRAME.registerComponent('quest-controller', {
  * ───────────────────────────────────────────── */
 AFRAME.registerComponent('thumbstick-locomotion', {
   schema: {
-    speed:    { type: 'number', default: 2.2 },  // metres / second
+    speed:    { type: 'number', default: 2.2 },  // metres/sec
     deadzone: { type: 'number', default: 0.15 },
   },
 
@@ -193,12 +117,12 @@ AFRAME.registerComponent('thumbstick-locomotion', {
     this.rig  = document.querySelector('#player');
     this.head = document.querySelector('#head');
 
-    this.onThumbstick = (evt) => {
-      const x = evt.detail.x || 0;
-      const y = evt.detail.y || 0;
+    this.onThumbstick = function (evt) {
+      var x = evt.detail.x || 0;
+      var y = evt.detail.y || 0;
       this.axisX = Math.abs(x) < this.data.deadzone ? 0 : x;
       this.axisY = Math.abs(y) < this.data.deadzone ? 0 : y;
-    };
+    }.bind(this);
     this.el.addEventListener('thumbstickmoved', this.onThumbstick);
 
     this._fwd   = new THREE.Vector3();
@@ -209,18 +133,18 @@ AFRAME.registerComponent('thumbstick-locomotion', {
   tick: function (time, delta) {
     if (!this.axisX && !this.axisY) return;
     if (!this.rig || !this.head) return;
-    const scene = this.el.sceneEl;
-    if (!scene.is('vr-mode')) return;
+    if (!this.el.sceneEl.is('vr-mode')) return;
 
-    const dt = Math.min(delta, 50) / 1000;
+    var dt = Math.min(delta, 50) / 1000;
 
+    // Head-relative movement, flattened to ground plane
     this.head.object3D.getWorldDirection(this._fwd);
     this._fwd.y = 0;
     this._fwd.multiplyScalar(-1).normalize();
     this._right.crossVectors(this._fwd, new THREE.Vector3(0, 1, 0)).normalize();
 
     this._move.set(0, 0, 0)
-      .addScaledVector(this._fwd,  -this.axisY)
+      .addScaledVector(this._fwd,  -this.axisY)   // stick up (y=-1) => forward
       .addScaledVector(this._right, this.axisX);
 
     if (this._move.lengthSq() > 1) this._move.normalize();
@@ -249,30 +173,28 @@ AFRAME.registerComponent('snap-turn', {
     this.rig  = document.querySelector('#player');
     this.head = document.querySelector('#head');
 
-    this.onThumbstick = (evt) => {
-      const x = evt.detail.x || 0;
-
+    this.onThumbstick = function (evt) {
+      var x = evt.detail.x || 0;
       if (Math.abs(x) < this.data.resetAt) { this.armed = true; return; }
       if (!this.armed || Math.abs(x) < this.data.threshold) return;
       this.armed = false;
-
-      const dir = x > 0 ? -1 : 1;
+      var dir = x > 0 ? -1 : 1; // stick right = clockwise
       this.turn(dir * this.data.degrees);
-    };
+    }.bind(this);
     this.el.addEventListener('thumbstickmoved', this.onThumbstick);
   },
 
   turn: function (degrees) {
     if (!this.rig || !this.head) return;
-    const rad = THREE.MathUtils.degToRad(degrees);
-
-    const headWorld = new THREE.Vector3();
+    var rad = THREE.MathUtils.degToRad(degrees);
+    var headWorld = new THREE.Vector3();
     this.head.object3D.getWorldPosition(headWorld);
 
-    const rigObj = this.rig.object3D;
+    var rigObj = this.rig.object3D;
     rigObj.rotation.y += rad;
 
-    const newHeadWorld = new THREE.Vector3();
+    // Compensate translation so the head stays in place (pivot around head)
+    var newHeadWorld = new THREE.Vector3();
     rigObj.updateMatrixWorld(true);
     this.head.object3D.getWorldPosition(newHeadWorld);
     rigObj.position.add(headWorld.sub(newHeadWorld));
@@ -290,38 +212,40 @@ AFRAME.registerComponent('vr-grab', {
   init: function () {
     this.grabbing = false;
 
-    this.onGripDown = () => {
-      const target = this.raycastTarget('interactable');
+    this.onGripDown = function () {
+      var target = this.raycastTarget('interactable');
       if (target && window.bakeryGame) {
         window.bakeryGame.pickUpItem(target, this.el);
         this.grabbing = true;
       }
-    };
+    }.bind(this);
 
-    this.onGripUp = () => {
+    this.onGripUp = function () {
       if (!this.grabbing) return;
       this.grabbing = false;
-      const game = window.bakeryGame;
+      var game = window.bakeryGame;
       if (!game || !game.heldItem) return;
 
-      const zone = this.raycastTarget('drop-zone');
+      var zone = this.raycastTarget('drop-zone');
       if (zone) {
         game.tryPlace(zone);
-        if (!game.heldItem) return;
+        if (!game.heldItem) return; // placed successfully
       }
       game.releaseHeldWithPhysics();
-    };
+    }.bind(this);
 
     this.el.addEventListener('gripdown', this.onGripDown);
     this.el.addEventListener('gripup', this.onGripUp);
   },
 
+  // Find the closest ancestor with the given class among the controller's
+  // current raycaster intersections.
   raycastTarget: function (className) {
-    const rc = this.el.components.raycaster;
+    var rc = this.el.components.raycaster;
     if (!rc) return null;
-    const els = rc.intersectedEls || [];
-    for (const hit of els) {
-      let node = hit;
+    var els = rc.intersectedEls || [];
+    for (var i = 0; i < els.length; i++) {
+      var node = els[i];
       while (node && node !== this.el.sceneEl) {
         if (node.classList && node.classList.contains(className)) return node;
         node = node.parentElement;
@@ -337,24 +261,24 @@ AFRAME.registerComponent('vr-grab', {
 });
 
 /* ─────────────────────────────────────────────
- * DESKTOP <-> VR MODE MANAGER (on <a-scene>)
+ * DESKTOP ↔ VR MODE MANAGER (on <a-scene>)
  * ───────────────────────────────────────────── */
 AFRAME.registerComponent('vr-mode-manager', {
   init: function () {
-    const scene = this.el;
+    var scene = this.el;
 
-    scene.addEventListener('enter-vr', () => {
-      const cursor = document.querySelector('#cursor');
+    scene.addEventListener('enter-vr', function () {
+      var cursor = document.querySelector('#cursor');
       if (cursor) {
         cursor.setAttribute('visible', 'false');
         cursor.setAttribute('raycaster', 'enabled', false);
       }
       document.body.classList.add('in-vr');
-      console.log('[vr.js] Entered VR — quest-controller active, desktop cursor disabled');
+      console.log('[vr.js] Entered VR — laser-controls active, desktop cursor disabled');
     });
 
-    scene.addEventListener('exit-vr', () => {
-      const cursor = document.querySelector('#cursor');
+    scene.addEventListener('exit-vr', function () {
+      var cursor = document.querySelector('#cursor');
       if (cursor) {
         cursor.setAttribute('visible', 'true');
         cursor.setAttribute('raycaster', 'enabled', true);
