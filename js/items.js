@@ -1,17 +1,15 @@
 /**
- * items.js  —  Kawaii Bakery (FIXED v4)
+ * items.js  —  Kawaii Bakery (FIXED v5 — VR)
  *
- * Changes from v3:
- *  - Macaron / muffin / brownie drop-zone z moved to -5.35 so they sit fully
- *    inside the shelf (shelf planks run from z≈-5.25 to z≈-5.55 at world coords;
- *    zones at -5.48 were clipping the back panel).
- *  - Croissant count: 2 → 5
- *  - Cupcake count:   2 → 5
- *  - New items: fork (count 3, zone-fork) and spoon (count 3, zone-spoon)
- *    with matching drop zones on the right-wall deco shelf.
- *  - Spawn surfaces expanded with a third surface (floor tray area) to fit
- *    the extra items without recycling slots.
- *  - All items have pickupable + ammo-body kinematic (unchanged from v3).
+ * Changes from v4:
+ *  - ammo-shape now declares "fit: manual" (explicit halfExtents are given).
+ *    Without it the shape defaulted to FIT.ALL and threw
+ *    "Cannot use FIT.ALL without object3DMap.mesh" before meshes loaded.
+ *  - Removed "shader: flat" from materials that also set emissive (flat
+ *    shader has no emissive support → console warning spam). Emissive kept.
+ *  - Removed invalid shader value on <a-text> (text uses its own shaders).
+ *
+ * Layout / counts / visuals unchanged from v4.
  */
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -38,17 +36,6 @@ window.addEventListener('DOMContentLoaded', () => {
     ];
 
     // ── Spawn surfaces ──────────────────────────────────────────
-    // Three surfaces so we never run out of unique slots.
-    //
-    // 1. Display counter glass top  y=1.18, world (0, 0, -1.5)
-    //    x: -2.1..+2.1  z: -1.88..-1.12
-    //
-    // 2. Prep table top             y=0.98, world (-2, 0, 0.5)
-    //    x: -2.8..-1.2  z:  0.1.. 0.9
-    //
-    // 3. Extra prep tray on the floor near prep table (lower surface)
-    //    Placed at y=0.06 (floor level items on a small tray entity)
-    //    x: -3.6..-1.0  z:  1.1.. 2.0
     const surfaces = [
       { y: 1.18, xMin: -2.1, xMax:  2.1, zMin: -1.88, zMax: -1.12 },
       { y: 0.98, xMin: -2.8, xMax: -1.2, zMin:  0.1,  zMax:  0.9  },
@@ -84,10 +71,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     // ── Drop zones ───────────────────────────────────────────────
-    // FIX: macaron/muffin/brownie z moved from -5.48 → -5.35 so they
-    //      stay inside the shelf depth (shelf planks depth 0.45 centred
-    //      at z=0.15 relative to shelf entity at z=-5.7 → world z -5.25..-5.55).
-    //      z=-5.35 keeps the zone label well inside and not clipping the back panel.
     const extraZones = [
       { id: 'zone-cupcake', type: 'cupcake',  pos: '0 0.9 -5.25',     label: '🧁 Cupcakes'  },
       { id: 'zone-cookie',  type: 'cookie',   pos: '-1.8 0.9 -5.25',  label: '🍪 Cookies'   },
@@ -95,7 +78,6 @@ window.addEventListener('DOMContentLoaded', () => {
       { id: 'zone-macaron', type: 'macaron',  pos: '-2.0 1.78 -5.35', label: '🫐 Macarons'  },
       { id: 'zone-muffin',  type: 'muffin',   pos: '2.0 1.78 -5.35',  label: '🧁 Muffins'   },
       { id: 'zone-brownie', type: 'brownie',  pos: '0 2.68 -5.35',    label: '🍫 Brownies'  },
-      // Fork & spoon go on the right-wall deco shelf (zone-deco area)
       { id: 'zone-fork',  type: 'fork',  pos: '5.77 2.08 -0.5', label: '🍴 Forks'  },
       { id: 'zone-spoon', type: 'spoon', pos: '5.77 2.08 -1.5', label: '🥄 Spoons' },
     ];
@@ -114,8 +96,9 @@ window.addEventListener('DOMContentLoaded', () => {
       box.setAttribute('height', '0.07');
       box.setAttribute('depth', '0.28');
       box.setAttribute('class', 'zone-visual');
+      // FIX: no "shader: flat" together with emissive
       box.setAttribute('material',
-        'color: #ffd0e8; opacity: 0.5; transparent: true; emissive: #ff80c0; emissiveIntensity: 0.45; shader: flat');
+        'color: #ffd0e8; opacity: 0.5; transparent: true; emissive: #ff80c0; emissiveIntensity: 0.45');
       el.appendChild(box);
 
       const txt = document.createElement('a-text');
@@ -124,7 +107,6 @@ window.addEventListener('DOMContentLoaded', () => {
       txt.setAttribute('position', '0 0.22 0');
       txt.setAttribute('width', '3.5');
       txt.setAttribute('color', '#a0006a');
-      txt.setAttribute('shader', 'flat');
       // Fork/spoon zones on the side wall need rotated text
       if (z.pos.startsWith('5.77')) {
         txt.setAttribute('rotation', '0 -90 0');
@@ -142,7 +124,7 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // ── Visual builder (all designs UNCHANGED from v3) ───────────
+    // ── Visual builder (all designs UNCHANGED except flat-shader fix) ──
     function buildVisual(type) {
       const group = document.createElement('a-entity');
 
@@ -223,7 +205,8 @@ window.addEventListener('DOMContentLoaded', () => {
             sp.setAttribute('radius', '0.012');
             const angle = (s / 5) * Math.PI * 2;
             sp.setAttribute('position', `${(Math.cos(angle) * 0.06).toFixed(3)} 0.14 ${(Math.sin(angle) * 0.06).toFixed(3)}`);
-            sp.setAttribute('material', `color: ${colours[s % colours.length]}; emissive: ${colours[s % colours.length]}; emissiveIntensity: 0.6; shader: flat`);
+            // FIX: emissive requires the standard shader — "shader: flat" removed
+            sp.setAttribute('material', `color: ${colours[s % colours.length]}; emissive: ${colours[s % colours.length]}; emissiveIntensity: 0.6`);
             group.appendChild(sp);
           }
           break;
@@ -319,9 +302,7 @@ window.addEventListener('DOMContentLoaded', () => {
           break;
         }
 
-        // ── NEW: FORK ──────────────────────────────────────────
         case 'fork': {
-          // Handle — long thin silver box
           const handle = document.createElement('a-box');
           handle.setAttribute('width', '0.025');
           handle.setAttribute('height', '0.28');
@@ -329,7 +310,6 @@ window.addEventListener('DOMContentLoaded', () => {
           handle.setAttribute('position', '0 -0.07 0');
           handle.setAttribute('material', 'color: #d0d0e8; metalness: 0.85; roughness: 0.15; emissive: #8888cc; emissiveIntensity: 0.1');
           group.appendChild(handle);
-          // Neck
           const neck = document.createElement('a-box');
           neck.setAttribute('width', '0.022');
           neck.setAttribute('height', '0.06');
@@ -337,7 +317,6 @@ window.addEventListener('DOMContentLoaded', () => {
           neck.setAttribute('position', '0 0.1 0');
           neck.setAttribute('material', 'color: #d0d0e8; metalness: 0.85; roughness: 0.15');
           group.appendChild(neck);
-          // Four tines
           const tineOffsets = [-0.03, -0.01, 0.01, 0.03];
           tineOffsets.forEach((ox) => {
             const tine = document.createElement('a-box');
@@ -351,9 +330,7 @@ window.addEventListener('DOMContentLoaded', () => {
           break;
         }
 
-        // ── NEW: SPOON ─────────────────────────────────────────
         case 'spoon': {
-          // Handle
           const shandle = document.createElement('a-box');
           shandle.setAttribute('width', '0.025');
           shandle.setAttribute('height', '0.26');
@@ -361,7 +338,6 @@ window.addEventListener('DOMContentLoaded', () => {
           shandle.setAttribute('position', '0 -0.06 0');
           shandle.setAttribute('material', 'color: #d0d0e8; metalness: 0.85; roughness: 0.15; emissive: #8888cc; emissiveIntensity: 0.1');
           group.appendChild(shandle);
-          // Bowl (ellipsoid sphere)
           const bowl = document.createElement('a-sphere');
           bowl.setAttribute('radius', '0.06');
           bowl.setAttribute('scale', '0.8 0.45 1');
@@ -397,9 +373,12 @@ window.addEventListener('DOMContentLoaded', () => {
         ent.setAttribute('position', `${slot.x} ${slot.y} ${slot.z}`);
         ent.setAttribute('rotation', `0 ${Math.floor(Math.random() * 360)} 0`);
 
-        // Kinematic physics — animation-driven until placed
+        // Kinematic physics — animation-driven until placed / thrown.
+        // FIX: fit: manual is REQUIRED with explicit halfExtents; the
+        // default (fit: all) needs a loaded mesh and threw
+        // "Cannot use FIT.ALL without object3DMap.mesh".
         ent.setAttribute('ammo-body', 'type: kinematic; emitCollisionEvents: true');
-        ent.setAttribute('ammo-shape', 'type: box; halfExtents: 0.12 0.1 0.12');
+        ent.setAttribute('ammo-shape', 'type: box; fit: manual; halfExtents: 0.12 0.1 0.12');
 
         const visual = buildVisual(def.type);
         ent.appendChild(visual);
@@ -407,7 +386,10 @@ window.addEventListener('DOMContentLoaded', () => {
         // Forward clicks from all children → parent pickup
         const forwardClick = (ev) => {
           ev.stopPropagation();
-          if (window.bakeryGame) window.bakeryGame.pickUpItem(ent);
+          if (window.bakeryGame) {
+            const holder = (ev.detail && ev.detail.cursorEl) ? ev.detail.cursorEl : null;
+            window.bakeryGame.pickUpItem(ent, holder);
+          }
         };
 
         scene.appendChild(ent);
