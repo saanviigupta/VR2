@@ -95,7 +95,7 @@ window.addEventListener('DOMContentLoaded', () => {
       box.setAttribute('width', '0.75');
       box.setAttribute('height', '0.07');
       box.setAttribute('depth', '0.28');
-      box.setAttribute('class', 'zone-visual');
+      box.setAttribute('class', 'zone-visual drop-zone');
       // FIX: no "shader: flat" together with emissive
       box.setAttribute('material',
         'color: #ffd0e8; opacity: 0.5; transparent: true; emissive: #ff80c0; emissiveIntensity: 0.45');
@@ -393,7 +393,13 @@ window.addEventListener('DOMContentLoaded', () => {
         };
 
         scene.appendChild(ent);
+        // FIX (grabbing): the actual MESHES live on child primitives, but the
+        // raycaster selector only matched the empty parent wrapper. Tag every
+        // descendant as .interactable too so controller/cursor lasers hit the
+        // real geometry. game.js resolves any clicked child back to the item
+        // root via closest('[item-type]').
         ent.querySelectorAll('*').forEach((child) => {
+          child.classList.add('interactable');
           child.addEventListener('click', forwardClick);
         });
 
@@ -414,5 +420,21 @@ window.addEventListener('DOMContentLoaded', () => {
 
     window.BAKERY_TOTAL_ITEMS = created;
     console.log('[items.js] created', created, 'items across', slotIdx, 'unique slots');
+
+    // FIX (grabbing): force every raycaster (both controllers + desktop
+    // cursor) to rebuild its target list now that all items exist. Without
+    // this, a raycaster that initialized before the items were appended can
+    // keep a stale (empty) object list and the laser passes straight through.
+    const refreshRaycasters = () => {
+      document.querySelectorAll('[raycaster]').forEach((rcEl) => {
+        const rc = rcEl.components && rcEl.components.raycaster;
+        if (rc && typeof rc.refreshObjects === 'function') rc.refreshObjects();
+      });
+      console.log('[items.js] raycasters refreshed');
+    };
+    setTimeout(refreshRaycasters, 0);
+    setTimeout(refreshRaycasters, 1500); // again after controllers connect
+    scene.addEventListener('controllerconnected', () => setTimeout(refreshRaycasters, 100));
+    scene.emit('bakery-items-ready');
   });
 });
