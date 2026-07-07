@@ -42,6 +42,18 @@ AFRAME.registerComponent('xr-gamepad', {
     this.lastX = 0;
     this.lastY = 0;
     this._logged = false; // one-time debug log
+
+    // Ensure raycaster objects selector survives laser-controls init
+    // (laser-controls may override raycaster properties during its setup).
+    var self = this;
+    this.el.addEventListener('controllerconnected', function () {
+      setTimeout(function () {
+        self.el.setAttribute('raycaster', 'objects', '.interactable, .drop-zone');
+        console.log('[xr-gamepad] raycaster objects re-applied for ' + self.data.hand);
+      }, 100);
+    });
+
+    console.log('[xr-gamepad] component initialized for hand: ' + this.data.hand);
   },
 
   tick: function () {
@@ -101,9 +113,30 @@ AFRAME.registerComponent('xr-gamepad', {
       if (trigBtn.pressed && !this.triggerPressed) {
         this.triggerPressed = true;
         this.el.emit('triggerdown', {}, false);
+        // Directly fire click on the raycaster's current target (backup for
+        // cursor component in case laser-controls conflicts with it).
+        this._clickTarget();
       } else if (!trigBtn.pressed && this.triggerPressed) {
         this.triggerPressed = false;
         this.el.emit('triggerup', {}, false);
+      }
+    }
+  },
+
+  // Fire 'click' on the first intersected .interactable / .drop-zone entity
+  _clickTarget: function () {
+    var rc = this.el.components.raycaster;
+    if (!rc) return;
+    var els = rc.intersectedEls || [];
+    for (var i = 0; i < els.length; i++) {
+      var node = els[i];
+      while (node && node !== this.el.sceneEl) {
+        if (node.classList &&
+            (node.classList.contains('interactable') || node.classList.contains('drop-zone'))) {
+          node.emit('click', { cursorEl: this.el, intersection: null }, false);
+          return;
+        }
+        node = node.parentElement;
       }
     }
   },
