@@ -183,6 +183,15 @@ class BakeryGame {
   // holderEl (optional): a VR controller entity. If omitted, the item
   // follows the camera (desktop behaviour, unchanged).
   pickUpItem(el, holderEl) {
+    // Child meshes are also tagged .interactable now — always resolve to the
+    // item ROOT (the entity carrying item-type) so we grab the whole item.
+    if (el && el.closest) {
+      const root = el.closest('[item-type]');
+      if (root) el = root;
+    }
+    if (!el || !el.getAttribute || !el.getAttribute('item-type')) return;
+    if (el.components && el.components.pickupable && el.components.pickupable.isPlaced) return;
+
     if (this.heldItem && this.heldItem !== el) {
       this.returnToOriginalSpot(this.heldItem);
     }
@@ -215,6 +224,12 @@ class BakeryGame {
   // ─── PLACE ─────────────────────────────────────────────────────
   tryPlace(zoneEl) {
     if (!this.heldItem) return;
+    // Resolve zone-visual children back to the zone root (zone-type holder).
+    if (zoneEl && zoneEl.closest) {
+      const zroot = zoneEl.closest('[zone-type]');
+      if (zroot) zoneEl = zroot;
+    }
+    if (!zoneEl || !zoneEl.getAttribute || !zoneEl.getAttribute('zone-type')) return;
 
     const itemType = this.heldItem.getAttribute('item-type');
     const zoneType = zoneEl.getAttribute('zone-type');
