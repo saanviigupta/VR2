@@ -166,25 +166,24 @@
         position="0 0 -1"
         geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.018"
         material="color: #ff6eb0; shader: flat; opacity: 0.9"
-        raycaster="objects: .interactable, .drop-zone; far: 6; interval: 30"
+        raycaster="objects: .interactable, .interactable *, .drop-zone, .drop-zone *; far: 6; interval: 30"
         desktop-interactor>
       </a-entity>
     </a-entity>
 
-    <!-- VR CONTROLLERS (NEW)
-         laser-controls auto-detects Quest Touch controllers and shows the
-         correct model + laser only when a controller is present, so desktop
-         mode is unaffected. Trigger fires standard A-Frame 'click' events on
-         intersected entities, so all existing click gameplay works in VR. -->
+    <!-- VR CONTROLLERS
+         quest-controller directly polls WebXR input sources each frame,
+         bypassing A-Frame's controller-detection (which can miss Quest 3).
+         Raycaster targets .interactable descendants so child meshes register. -->
     <a-entity id="leftHand"
-      laser-controls="hand: left"
-      raycaster="objects: .interactable, .drop-zone; far: 6; lineColor: #ff6eb0; lineOpacity: 0.8"
+      quest-controller="hand: left; lineColor: #ff6eb0"
+      raycaster="objects: .interactable, .interactable *, .drop-zone, .drop-zone *; far: 6; interval: 30"
       thumbstick-locomotion="speed: 2.2"
       vr-grab>
     </a-entity>
     <a-entity id="rightHand"
-      laser-controls="hand: right"
-      raycaster="objects: .interactable, .drop-zone; far: 6; lineColor: #ff9ad4; lineOpacity: 0.8"
+      quest-controller="hand: right; lineColor: #ff9ad4"
+      raycaster="objects: .interactable, .interactable *, .drop-zone, .drop-zone *; far: 6; interval: 30"
       snap-turn="degrees: 45"
       vr-grab>
     </a-entity>
