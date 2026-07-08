@@ -8,12 +8,7 @@
   <!-- A-Frame core -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
-  <!--
-    FIX #1: "AmmoModule is not a function"
-    aframe-physics-system does NOT bundle Ammo.js. The Ammo WASM build must be
-    loaded BEFORE the physics system script. This is the exact build the
-    aframe-physics-system docs specify.
-  -->
+  <!-- Ammo.js WASM build — must load BEFORE the physics system script -->
   <script src="https://cdn.jsdelivr.net/gh/MozillaReality/ammo.js@8bbc0ea/builds/ammo.wasm.js"></script>
 
   <!-- Ammo.js physics bindings for A-Frame -->
@@ -21,8 +16,10 @@
 
   <!-- Game components (must load before the scene is parsed) -->
   <script src="js/components.js"></script>
-  <!-- VR: controllers, locomotion, snap-turn, grab (NEW) -->
+  <!-- VR: controllers, locomotion, snap-turn, proximity grab -->
   <script src="js/vr.js"></script>
+  <!-- Audio: procedural ambience, music and SFX (no external files) -->
+  <script src="js/audio.js"></script>
 
   <style>
     body { margin: 0; overflow: hidden; background: #ffe0f0; font-family: 'Comic Sans MS', cursive; }
@@ -115,8 +112,10 @@
     <u>VR (Quest)</u><br>
     Left stick — Move<br>
     Right stick — Snap turn 45°<br>
-    Trigger — Pick up / place<br>
-    Grip — Grab · release to throw!<br>
+    Grip near an item — Grab it<br>
+    Release grip over a shelf — Place<br>
+    Release anywhere else — Drop / throw!<br>
+    Trigger + laser — Pick up / place from afar<br>
     <br>
     Tidy the bakery! ✨
   </div>
@@ -133,13 +132,7 @@
   <button id="play-again-btn" onclick="resetGame()">🍰 Play Again 🍰</button>
 </div>
 
-<!-- ═══════════ A-FRAME SCENE ═══════════
-     physics="driver: ammo" enables Ammo.js rigid-body physics.
-     FIX #2: every ammo-shape below now declares "fit: manual" because we
-     supply explicit halfExtents. Without it the shape defaults to FIT.ALL,
-     which requires a loaded mesh and threw
-     "Cannot use FIT.ALL without object3DMap.mesh".
--->
+<!-- ═══════════ A-FRAME SCENE ═══════════ -->
 <a-scene
   physics="driver: ammo; gravity: -9.8; debug: false"
   background="color: #ffe4f3"
@@ -150,10 +143,7 @@
 
   <a-assets></a-assets>
 
-  <!-- ═══════════ CAMERA RIG + PLAYER ═══════════
-       The rig (#player) is what moves in VR — never the camera itself.
-       Desktop: wasd-controls + look-controls (unchanged).
-       VR: thumbstick-locomotion (left stick) + snap-turn (right stick). -->
+  <!-- ═══════════ CAMERA RIG + PLAYER ═══════════ -->
   <a-entity id="player"
     position="0 0 3.5"
     wasd-controls="acceleration: 25">
@@ -171,10 +161,9 @@
       </a-entity>
     </a-entity>
 
-    <!-- VR CONTROLLERS
-         laser-controls provides pose tracking, controller model, laser, and
-         trigger→click. xr-gamepad adds reliable thumbstick/grip event polling
-         for Quest 3 (whose profile string may not be in A-Frame 1.5.0). -->
+    <!-- VR CONTROLLERS: laser-controls (pose/model/laser/trigger→click),
+         xr-gamepad (fallback input polling with dedup), vr-grab (grip
+         proximity grab + shelf snap + throw) on BOTH hands. -->
     <a-entity id="leftHand"
       laser-controls="hand: left"
       raycaster="objects: .interactable, .drop-zone; far: 6; interval: 30"
@@ -219,7 +208,7 @@
   <a-box position="0 5 0"     width="12" height="0.2" depth="12"
     material="color: #fff5fb; roughness: 0.9"></a-box>
 
-  <!-- Ceiling lights (emissive works: default standard shader) -->
+  <!-- Ceiling lights -->
   <a-box position="-2 4.85 -2" width="1.5" height="0.05" depth="1.5"
     material="color: #fff9e6; emissive: #fff9c4; emissiveIntensity: 0.6"></a-box>
   <a-box position="2 4.85 -2"  width="1.5" height="0.05" depth="1.5"
@@ -351,9 +340,7 @@
     <a-sphere   position="0.08 0.68 0.08" radius="0.1"          material="color: #c0f0b0; roughness: 0.8"></a-sphere>
   </a-entity>
 
-  <!-- Floating sparkles
-       FIX #3: removed "shader: flat" (flat shader has no emissive property
-       and caused the "Unknown property emissive" console warnings). -->
+  <!-- Floating sparkles -->
   <a-entity id="sparkles">
     <a-sphere position="-1 2.5 -3"  radius="0.03" material="color: #ffdfff; emissive: #ffaaff; emissiveIntensity: 1" animation="property: position; to: -1 2.8 -3; dur: 2000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
     <a-sphere position="1 3 -2"     radius="0.025" material="color: #ffffaa; emissive: #ffffaa; emissiveIntensity: 1" animation="property: position; to: 1 3.3 -2; dur: 2500; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
@@ -361,10 +348,7 @@
     <a-sphere position="-3 2.8 -1"  radius="0.02" material="color: #afffdd; emissive: #aaffcc; emissiveIntensity: 1" animation="property: position; to: -3 3.1 -1; dur: 3000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
   </a-entity>
 
-  <!-- ═══════════ DROP ZONES ═══════════
-       FIX #3 (cont.): zone visuals previously used "shader: flat" together
-       with emissive — flat shader doesn't support emissive. Removed flat so
-       the glow works and the warnings stop. -->
+  <!-- ═══════════ DROP ZONES ═══════════ -->
 
   <!-- 🥐 Croissants — shelf row 1 left -->
   <a-entity id="zone-croissant" class="drop-zone" zone-type="croissant" position="-1.5 0.9 -5.48" drop-zone
