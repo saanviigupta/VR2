@@ -1,15 +1,13 @@
 /**
- * 🍰 Kawaii Bakery — A-Frame Components (FIXED)
+ * 🍰 Kawaii Bakery — A-Frame Components
  * components.js
  *
- * Fixes in this version:
- *  - setEmissive() no longer touches materials that use the flat shader
- *    (flat has no `emissive` property — this was the source of the endless
- *    "Unknown property `emissive`" console warnings).
- *  - drop-zone pulse animation now animates a REAL property
- *    (material.emissiveIntensity on the .zone-visual child) instead of the
- *    invalid "components.drop-zone.emissiveIntensity".
- *  - desktop-interactor is disabled while in VR (controllers take over).
+ * Unchanged gameplay behaviour. Notes:
+ *  - pickupable + drop-zone hover/click work for BOTH the desktop cursor and
+ *    the VR laser (laser-controls emits mouseenter/mouseleave/click).
+ *  - Duplicate-input protection (double clicks from native + fallback VR
+ *    input) is handled centrally in game.js (pickUpItem is idempotent).
+ *  - desktop-interactor is inert while in VR (controllers take over).
  */
 
 // Shared helper: only set emissive props on shaders that support them.
@@ -40,8 +38,6 @@ AFRAME.registerComponent('pickupable', {
       this.el.querySelectorAll('*').forEach((ch) => safeSetEmissive(ch, color, intensity));
     };
 
-    // Hover visuals — works for BOTH the desktop cursor and VR laser-controls,
-    // since both emit mouseenter / mouseleave / click on intersected entities.
     this.enterHandler = () => {
       if (this.isPlaced) return;
       setEmissive('#ffaae0', 0.45);
@@ -66,7 +62,7 @@ AFRAME.registerComponent('pickupable', {
       // In VR, e.detail.cursorEl is the controller that clicked — the held
       // item should follow that controller instead of the camera.
       const holder = (e.detail && e.detail.cursorEl) ? e.detail.cursorEl : null;
-      window.bakeryGame.pickUpItem(this.el, holder);
+      if (window.bakeryGame) window.bakeryGame.pickUpItem(this.el, holder);
     };
 
     this.el.addEventListener('mouseenter', this.enterHandler);
@@ -82,7 +78,7 @@ AFRAME.registerComponent('pickupable', {
 });
 
 // ─────────────────────────────────────────────
-// DESKTOP INTERACTOR (desktop only — disabled in VR)
+// DESKTOP INTERACTOR (desktop only — inert in VR)
 // ─────────────────────────────────────────────
 AFRAME.registerComponent('desktop-interactor', {
   init: function () {
@@ -90,7 +86,6 @@ AFRAME.registerComponent('desktop-interactor', {
 
     this.handleInteraction = (evt) => {
       try {
-        // In VR mode the controllers own interaction; ignore desktop events.
         if (cursorEl.sceneEl && cursorEl.sceneEl.is('vr-mode')) return;
 
         const rc = cursorEl.components && cursorEl.components.raycaster;
@@ -162,9 +157,7 @@ AFRAME.registerComponent('drop-zone', {
     this.filled = false;
     this.zoneType = this.el.getAttribute('zone-type');
 
-    // FIX: pulse the zone-visual's REAL material.emissiveIntensity property.
-    // Children may not exist yet when this component initializes (zones
-    // created from JS), so defer until the entity has loaded.
+    // Pulse the zone-visual's real material.emissiveIntensity property.
     const startPulse = () => {
       const visual = this.el.querySelector('.zone-visual');
       if (!visual) return;
@@ -181,7 +174,7 @@ AFRAME.registerComponent('drop-zone', {
     if (this.el.hasLoaded) setTimeout(startPulse, 0);
     else this.el.addEventListener('loaded', () => setTimeout(startPulse, 0));
 
-    this.enterZone = (e) => {
+    this.enterZone = () => {
       if (this.filled) return;
       const heldItem = window.bakeryGame && window.bakeryGame.heldItem;
       if (!heldItem) return;
@@ -195,12 +188,12 @@ AFRAME.registerComponent('drop-zone', {
       }
     };
 
-    this.leaveZone = (e) => {
+    this.leaveZone = () => {
       if (this.filled) return;
       const visual = this.el.querySelector('.zone-visual');
       if (visual) {
         const zoneColors = {
-          croissant:  '#ffb830', pastry: '#ff60b0', bread: '#e08820', dish: '#60c0ff', decoration: '#ff60b0'
+          croissant: '#ffb830', pastry: '#ff60b0', bread: '#e08820', dish: '#60c0ff', decoration: '#ff60b0'
         };
         visual.setAttribute('material', 'emissive', zoneColors[this.zoneType] || '#ffffff');
         visual.setAttribute('material', 'emissiveIntensity', 0.4);
@@ -211,7 +204,7 @@ AFRAME.registerComponent('drop-zone', {
     this.clickZone = (e) => {
       if (this.filled) return;
       e.stopPropagation();
-      window.bakeryGame.tryPlace(this.el);
+      if (window.bakeryGame) window.bakeryGame.tryPlace(this.el);
     };
 
     this.el.addEventListener('mouseenter', this.enterZone);
