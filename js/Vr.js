@@ -1,129 +1,153 @@
 /**
- * 🍰 Kawaii Bakery — VR Support (v3 — laser-controls + xr-gamepad)
+ * 🍰 Kawaii Bakery — VR Support (v4 — proximity grab + dedup)
  * vr.js
  *
- * Architecture:
- *  - laser-controls     : A-Frame's built-in controller handling. Provides
- *                          pose tracking, controller model, visible laser,
- *                          and trigger→click on intersected entities.
- *  - xr-gamepad         : Lightweight WebXR gamepad poller. Reads thumbstick
- *                          axes and grip/trigger buttons directly from
- *                          XRInputSource.gamepad each frame, emitting named
- *                          events (thumbstickmoved, gripdown, gripup, etc.)
- *                          that our locomotion/grab components listen for.
- *                          This ensures input works even if laser-controls
- *                          can't map Quest 3's controller profile to a
- *                          specific named component like oculus-touch-controls.
- *  - thumbstick-locomotion : smooth movement with LEFT joystick.
- *  - snap-turn           : RIGHT joystick 45° snap turn.
- *  - vr-grab             : GRIP button grab + throw.
- *  - vr-mode-manager     : toggles desktop cursor on/off when entering/exiting VR.
+ * What changed vs v3 (the version that couldn't grab):
  *
- * Items and drop-zones have invisible raycast-hit geometry on their parent
- * entities (.interactable / .drop-zone) so the raycaster can target them
- * directly and cursor/laser events fire on the correct entity.
+ *  1. PROXIMITY GRABBING. Grip now grabs the nearest .interactable within
+ *     reach of the controller (GRAB_RADIUS), with the laser raycast kept as
+ *     a fallback for grabbing at a distance. Previously grabbing ONLY worked
+ *     if the laser happened to intersect the item at the exact moment grip
+ *     was squeezed — which almost never happens when you reach for an object
+ *     naturally in a headset.
+ *
+ *  2. PROXIMITY SHELF SNAP ON RELEASE. Releasing grip now checks the drop
+ *     zone nearest to the ITEM (not the laser). If a zone is within
+ *     SNAP_RADIUS, the game attempts placement (correct type → snaps in,
+ *     wrong type → error flash + item drops with physics). Otherwise the
+ *     item is released as a dynamic body and falls/throws realistically.
+ *
+ *  3. INPUT DE-DUPLICATION. On Quest, laser-controls (via
+ *     oculus-touch-controls) already emits gripdown/gripup/triggerdown.
+ *     xr-gamepad previously emitted the same events again from raw gamepad
+ *     polling, causing double grabs and broken state. xr-gamepad now goes
+ *     quiet for any button the native component already reported, and only
+ *     acts as a fallback for controllers whose profile A-Frame can't map
+ *     (e.g. some Quest 3 runtimes).
+ *
+ *  4. Both hands supported identically (vr-grab on both controllers).
  */
 
+var VR_GRAB_RADIUS = 0.38;  // metres — how close the controller must be to grab
+var VR_SNAP_RADIUS = 0.45;  // metres — how close an item must be to a zone to snap
+
 /* ─────────────────────────────────────────────
- * XR-GAMEPAD — Direct WebXR gamepad polling
+ * Helpers
+ * ───────────────────────────────────────────── */
+function vrNearestByClass(className, worldPos, maxDist, filterFn) {
+  var els = document.querySelectorAll('.' + className);
+  var best = null, bestD = maxDist;
+  var p = new THREE.Vector3();
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    if (!el.object3D) continue;
+    if (filterFn && !filterFn(el)) continue;
+    el.object3D.getWorldPosition(p);
+    var d = p.distanceTo(worldPos);
+    if (d < bestD) { bestD = d; best = el; }
+  }
+  return best;
+}
+
+/* ─────────────────────────────────────────────
+ * XR-GAMEPAD — WebXR gamepad polling FALLBACK
  *
- * Emits: thumbstickmoved, gripdown, gripup, triggerdown, triggerup
- * on the entity each frame when button/axis state changes.
- * Works alongside laser-controls (which handles pose + model + click).
+ * Only emits gripdown/gripup/triggerdown/triggerup if the native
+ * tracked-controls path did NOT already emit them (dedup via timestamp
+ * flags set by listeners below). Thumbstick events are always emitted
+ * because A-Frame's axismove format differs and our locomotion/snap-turn
+ * components listen for our normalized 'thumbstickmoved'.
  * ───────────────────────────────────────────── */
 AFRAME.registerComponent('xr-gamepad', {
-  schema: {
-    hand: { type: 'string', default: 'left' },
-  },
+  schema: { hand: { type: 'string', default: 'left' } },
 
   init: function () {
-    this.gripPressed    = false;
+    this.gripPressed = false;
     this.triggerPressed = false;
     this.lastX = 0;
     this.lastY = 0;
-    this._logged = false; // one-time debug log
+    this._logged = false;
+    this._nativeGrip = false;    // set when oculus-touch-controls handles grip
+    this._nativeTrigger = false;
 
-    // Ensure raycaster objects selector survives laser-controls init
-    // (laser-controls may override raycaster properties during its setup).
     var self = this;
+
+    // If the native controller component fires these, it owns the buttons —
+    // xr-gamepad stops emitting duplicates permanently.
+    this.el.addEventListener('gripdown', function (e) {
+      if (!e.detail || e.detail._xrgp !== true) self._nativeGrip = true;
+    });
+    this.el.addEventListener('triggerdown', function (e) {
+      if (!e.detail || e.detail._xrgp !== true) self._nativeTrigger = true;
+    });
+
+    // Re-apply raycaster selector after laser-controls initializes (it can
+    // override raycaster props during setup).
     this.el.addEventListener('controllerconnected', function () {
       setTimeout(function () {
         self.el.setAttribute('raycaster', 'objects', '.interactable, .drop-zone');
-        console.log('[xr-gamepad] raycaster objects re-applied for ' + self.data.hand);
       }, 100);
     });
-
-    console.log('[xr-gamepad] component initialized for hand: ' + this.data.hand);
   },
 
   tick: function () {
     var renderer = this.el.sceneEl.renderer;
     if (!renderer || !renderer.xr || !renderer.xr.isPresenting) return;
-
     var session = renderer.xr.getSession();
     if (!session) return;
 
-    // Find input source matching our hand
     var source = null;
-    var inputSources = session.inputSources;
-    for (var i = 0; i < inputSources.length; i++) {
-      if (inputSources[i].handedness === this.data.hand) {
-        source = inputSources[i];
+    for (var i = 0; i < session.inputSources.length; i++) {
+      if (session.inputSources[i].handedness === this.data.hand) {
+        source = session.inputSources[i];
         break;
       }
     }
     if (!source || !source.gamepad) return;
-
     var gp = source.gamepad;
 
-    // One-time debug log to show gamepad layout
     if (!this._logged) {
       this._logged = true;
-      console.log('[xr-gamepad] ' + this.data.hand + ' connected — axes:', gp.axes.length,
-        'buttons:', gp.buttons.length, 'profiles:', source.profiles);
+      console.log('[xr-gamepad] ' + this.data.hand + ' — axes:' + gp.axes.length +
+        ' buttons:' + gp.buttons.length + ' profiles:', source.profiles);
     }
 
-    // ── Thumbstick axes ─────────────────────────────────────────
-    // Quest 3 may report thumbstick at [0,1] or [2,3] depending on runtime.
-    // Sum both pairs — the unused pair is always 0, so this works either way.
+    // Thumbstick — Quest reports at [2,3] (xr-standard) or [0,1]; the unused
+    // pair reads 0, so summing works for both layouts.
     var axisX = (gp.axes[0] || 0) + (gp.axes.length > 2 ? (gp.axes[2] || 0) : 0);
     var axisY = (gp.axes[1] || 0) + (gp.axes.length > 3 ? (gp.axes[3] || 0) : 0);
     if (axisX !== this.lastX || axisY !== this.lastY) {
-      this.lastX = axisX;
-      this.lastY = axisY;
+      this.lastX = axisX; this.lastY = axisY;
       this.el.emit('thumbstickmoved', { x: axisX, y: axisY }, false);
     }
 
-    // ── Grip / Squeeze button ────────────────────────────────────
-    // Quest Touch: buttons[1] = grip/squeeze
+    // Grip (xr-standard button 1) — fallback only if native path is silent.
     var gripBtn = gp.buttons[1];
-    if (gripBtn) {
+    if (gripBtn && !this._nativeGrip) {
       if (gripBtn.pressed && !this.gripPressed) {
         this.gripPressed = true;
-        this.el.emit('gripdown', {}, false);
+        this.el.emit('gripdown', { _xrgp: true }, false);
       } else if (!gripBtn.pressed && this.gripPressed) {
         this.gripPressed = false;
-        this.el.emit('gripup', {}, false);
+        this.el.emit('gripup', { _xrgp: true }, false);
       }
     }
 
-    // ── Trigger button (index 0) ────────────────────────────────
+    // Trigger (button 0) — fallback only.
     var trigBtn = gp.buttons[0];
-    if (trigBtn) {
+    if (trigBtn && !this._nativeTrigger) {
       if (trigBtn.pressed && !this.triggerPressed) {
         this.triggerPressed = true;
-        this.el.emit('triggerdown', {}, false);
-        // Directly fire click on the raycaster's current target (backup for
-        // cursor component in case laser-controls conflicts with it).
+        this.el.emit('triggerdown', { _xrgp: true }, false);
         this._clickTarget();
       } else if (!trigBtn.pressed && this.triggerPressed) {
         this.triggerPressed = false;
-        this.el.emit('triggerup', {}, false);
+        this.el.emit('triggerup', { _xrgp: true }, false);
       }
     }
   },
 
-  // Fire 'click' on the first intersected .interactable / .drop-zone entity
+  // Fallback trigger→click on the raycaster's current target.
   _clickTarget: function () {
     var rc = this.el.components.raycaster;
     if (!rc) return;
@@ -147,7 +171,7 @@ AFRAME.registerComponent('xr-gamepad', {
  * ───────────────────────────────────────────── */
 AFRAME.registerComponent('thumbstick-locomotion', {
   schema: {
-    speed:    { type: 'number', default: 2.2 },  // metres/sec
+    speed:    { type: 'number', default: 2.2 },
     deadzone: { type: 'number', default: 0.15 },
   },
 
@@ -168,6 +192,7 @@ AFRAME.registerComponent('thumbstick-locomotion', {
     this._fwd   = new THREE.Vector3();
     this._right = new THREE.Vector3();
     this._move  = new THREE.Vector3();
+    this._up    = new THREE.Vector3(0, 1, 0);
   },
 
   tick: function (time, delta) {
@@ -177,14 +202,13 @@ AFRAME.registerComponent('thumbstick-locomotion', {
 
     var dt = Math.min(delta, 50) / 1000;
 
-    // Head-relative movement, flattened to ground plane
     this.head.object3D.getWorldDirection(this._fwd);
     this._fwd.y = 0;
     this._fwd.multiplyScalar(-1).normalize();
-    this._right.crossVectors(this._fwd, new THREE.Vector3(0, 1, 0)).normalize();
+    this._right.crossVectors(this._fwd, this._up).normalize();
 
     this._move.set(0, 0, 0)
-      .addScaledVector(this._fwd,  -this.axisY)   // stick up (y=-1) => forward
+      .addScaledVector(this._fwd,  -this.axisY)
       .addScaledVector(this._right, this.axisX);
 
     if (this._move.lengthSq() > 1) this._move.normalize();
@@ -218,7 +242,7 @@ AFRAME.registerComponent('snap-turn', {
       if (Math.abs(x) < this.data.resetAt) { this.armed = true; return; }
       if (!this.armed || Math.abs(x) < this.data.threshold) return;
       this.armed = false;
-      var dir = x > 0 ? -1 : 1; // stick right = clockwise
+      var dir = x > 0 ? -1 : 1;
       this.turn(dir * this.data.degrees);
     }.bind(this);
     this.el.addEventListener('thumbstickmoved', this.onThumbstick);
@@ -233,7 +257,6 @@ AFRAME.registerComponent('snap-turn', {
     var rigObj = this.rig.object3D;
     rigObj.rotation.y += rad;
 
-    // Compensate translation so the head stays in place (pivot around head)
     var newHeadWorld = new THREE.Vector3();
     rigObj.updateMatrixWorld(true);
     this.head.object3D.getWorldPosition(newHeadWorld);
@@ -246,31 +269,59 @@ AFRAME.registerComponent('snap-turn', {
 });
 
 /* ─────────────────────────────────────────────
- * GRIP GRAB + THROW
+ * GRIP GRAB + PROXIMITY SNAP + THROW
  * ───────────────────────────────────────────── */
 AFRAME.registerComponent('vr-grab', {
   init: function () {
     this.grabbing = false;
+    this._ctrlPos = new THREE.Vector3();
+    this._itemPos = new THREE.Vector3();
 
     this.onGripDown = function () {
-      var target = this.raycastTarget('interactable');
-      if (target && window.bakeryGame) {
-        window.bakeryGame.pickUpItem(target, this.el);
+      if (this.grabbing) return; // dedup: native + fallback events
+      var game = window.bakeryGame;
+      if (!game) return;
+
+      // 1) Proximity: nearest grabbable item within reach of the hand.
+      this.el.object3D.getWorldPosition(this._ctrlPos);
+      var target = vrNearestByClass('interactable', this._ctrlPos, VR_GRAB_RADIUS,
+        function (el) {
+          var pc = el.components && el.components.pickupable;
+          return !(pc && pc.isPlaced);
+        });
+
+      // 2) Fallback: whatever the laser is pointing at.
+      if (!target) target = this.raycastTarget('interactable');
+
+      if (target) {
+        game.pickUpItem(target, this.el);
         this.grabbing = true;
       }
     }.bind(this);
 
     this.onGripUp = function () {
-      if (!this.grabbing) return;
+      if (!this.grabbing) return; // dedup + ignore if this hand isn't holding
       this.grabbing = false;
       var game = window.bakeryGame;
-      if (!game || !game.heldItem) return;
+      if (!game || !game.heldItem || game.holder !== this.el) return;
 
-      var zone = this.raycastTarget('drop-zone');
+      // 1) Zone nearest to the ITEM (natural "hover over shelf and let go").
+      game.heldItem.object3D.getWorldPosition(this._itemPos);
+      var zone = vrNearestByClass('drop-zone', this._itemPos, VR_SNAP_RADIUS,
+        function (el) {
+          var dz = el.components && el.components['drop-zone'];
+          return !(dz && dz.filled);
+        });
+
+      // 2) Fallback: zone under the laser.
+      if (!zone) zone = this.raycastTarget('drop-zone');
+
       if (zone) {
         game.tryPlace(zone);
-        if (!game.heldItem) return; // placed successfully
+        if (!game.heldItem) return; // placed successfully — done
       }
+
+      // Otherwise (or wrong zone): drop where released, with physics + throw.
       game.releaseHeldWithPhysics();
     }.bind(this);
 
@@ -278,8 +329,6 @@ AFRAME.registerComponent('vr-grab', {
     this.el.addEventListener('gripup', this.onGripUp);
   },
 
-  // Find the closest ancestor with the given class among the controller's
-  // current raycaster intersections.
   raycastTarget: function (className) {
     var rc = this.el.components.raycaster;
     if (!rc) return null;
@@ -314,7 +363,8 @@ AFRAME.registerComponent('vr-mode-manager', {
         cursor.setAttribute('raycaster', 'enabled', false);
       }
       document.body.classList.add('in-vr');
-      console.log('[vr.js] Entered VR — laser-controls active, desktop cursor disabled');
+      if (window.bakeryAudio) window.bakeryAudio.start();
+      console.log('[vr.js] Entered VR — controllers active');
     });
 
     scene.addEventListener('exit-vr', function () {
