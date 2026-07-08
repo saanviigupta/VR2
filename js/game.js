@@ -1,17 +1,19 @@
 /**
- * 🍰 Kawaii Bakery — Game Logic (FIXED v5 — VR)
+ * 🍰 Kawaii Bakery — Game Logic (v6 — VR grab hardening + audio)
  * game.js
  *
- * Changes from v3/v4:
- *  - pickUpItem(el, holderEl): held items can follow a VR controller instead
- *    of the camera (holderEl = the laser-controls entity that grabbed it).
- *  - Held-item velocity is tracked every frame so releasing GRIP throws the
- *    item with realistic momentum (releaseHeldWithPhysics()).
- *  - releaseHeldWithPhysics(): converts the item's ammo-body to DYNAMIC so it
- *    falls, collides with the floor/furniture, and responds to gravity.
- *  - Emissive helpers skip flat-shader materials (console-warning fix).
- *  - Gaze hover-highlight loop and the "click empty space to return item"
- *    behaviour are desktop-only; in VR the controllers handle everything.
+ * Changes from v5:
+ *  - Audio hooks: pickup / drop / success / error / victory / UI click sounds
+ *    via window.bakeryAudio (see audio.js). Spatial listener follows the head.
+ *  - pickUpItem() is idempotent (grabbing the item you already hold is a
+ *    no-op) — fixes double-event glitches from duplicate controller input.
+ *  - pickUpItem() removes animation__bob/__return/__snap BEFORE taking
+ *    control, so old animations can no longer yank an item out of your hand.
+ *  - Held items keep their controller offset every frame (stable attachment)
+ *    and only spin slowly when held by the desktop camera (in VR the item
+ *    keeps its orientation relative to your hand — feels much better).
+ *  - tryPlace() plays an error sound and, in VR, drops the item with physics
+ *    when the type is wrong (desktop keeps the old "keep holding" behaviour).
  *
  * All original desktop gameplay is preserved.
  */
@@ -24,7 +26,7 @@ class BakeryGame {
     this.placedItems = 0;
 
     this.holdOffsetCamera     = { x: 0, y: -0.28, z: -0.75 };
-    this.holdOffsetController = { x: 0, y: 0.02,  z: -0.30 };
+    this.holdOffsetController = { x: 0, y: 0.02,  z: -0.12 };
 
     this.camera = document.querySelector('[camera]');
     this.player = document.querySelector('#player');
@@ -59,11 +61,16 @@ class BakeryGame {
 
     // Desktop only: keyboard 'E' / Enter — pick or place at camera centre
     window.addEventListener('keydown', (ev) => {
+      if (this.scene && this.scene.is('vr-mode')) return;
       const key = ev.key || ev.code;
       if (key === 'e' || key === 'E' || key === 'Enter') {
         this.raycastAction();
       }
     }, false);
+  }
+
+  _sfx(name) {
+    try { if (window.bakeryAudio) window.bakeryAudio.play(name); } catch (e) {}
   }
 
   // ─── Emissive helper (skips flat shader — no emissive support) ──
@@ -183,21 +190,35 @@ class BakeryGame {
   // holderEl (optional): a VR controller entity. If omitted, the item
   // follows the camera (desktop behaviour, unchanged).
   pickUpItem(el, holderEl) {
-    if (this.heldItem && this.heldItem !== el) {
+    if (!el) return;
+    const pc = el.components && el.components.pickupable;
+    if (pc && pc.isPlaced) return;
+
+    // Idempotent: re-grabbing the item you already hold (duplicate input
+    // events) is a no-op except possibly swapping hands.
+    if (this.heldItem === el) {
+      if (holderEl) this.holder = holderEl;
+      return;
+    }
+    if (this.heldItem) {
       this.returnToOriginalSpot(this.heldItem);
     }
+
     this.heldItem = el;
     this.holder   = holderEl || this.camera;
     this._velSamples.length = 0;
+
+    // Kill ALL position animations first — the idle bob was previously able
+    // to keep writing the item's position and yank it out of the hand.
+    el.removeAttribute('animation__bob');
+    el.removeAttribute('animation__return');
+    el.removeAttribute('animation__snap');
+    el.removeAttribute('animation__pickup');
 
     // Kinematic while in hand — position driven by JS
     this._setPhysicsKinematic(el);
 
     this._safeEmissive(el, '#ffffaa', 0.45);
-
-    el.removeAttribute('animation__bob');
-    el.removeAttribute('animation__return');
-    el.removeAttribute('animation__pickup');
     el.setAttribute('animation__pickup', { property: 'scale', from: '1 1 1', to: '1.2 1.2 1.2', dur: 160, easing: 'easeOutQuad' });
 
     if (!el._orig) {
@@ -206,6 +227,8 @@ class BakeryGame {
         rotation: Object.assign({}, el.getAttribute('rotation')),
       };
     }
+
+    this._sfx('pickup');
 
     const itemType = el.getAttribute('item-type');
     document.getElementById('holding-indicator').style.display = 'block';
@@ -222,6 +245,7 @@ class BakeryGame {
     if (itemType === zoneType) {
       this.placeItemCorrectly(this.heldItem, zoneEl);
     } else {
+      this._sfx('error');
       const visual = zoneEl.querySelector('.zone-visual');
       if (visual) {
         visual.setAttribute('material', 'color', '#ff8888');
@@ -231,8 +255,6 @@ class BakeryGame {
   }
 
   placeItemCorrectly(itemEl, zoneEl) {
-    // Use the zone's WORLD position (extra zones are scene children, but this
-    // also stays correct if a zone is ever nested).
     const zoneWorld = new THREE.Vector3();
     zoneEl.object3D.getWorldPosition(zoneWorld);
 
@@ -259,6 +281,7 @@ class BakeryGame {
     this.holder   = null;
     document.getElementById('holding-indicator').style.display = 'none';
 
+    this._sfx('success');
     this.spawnSparkles(itemEl);
     this.placedItems++;
     this.updateHUD();
@@ -285,6 +308,8 @@ class BakeryGame {
     this.holder   = null;
     document.getElementById('holding-indicator').style.display = 'none';
 
+    this._sfx('drop');
+
     // Switch to dynamic so gravity + collisions take over…
     this._setPhysicsDynamic(el);
 
@@ -308,11 +333,10 @@ class BakeryGame {
     const b = s[s.length - 1];
     const dt = (b.t - a.t) / 1000;
     if (dt <= 0) return { x: 0, y: 0, z: 0 };
-    const scale = 1.0; // 1:1 hand-to-item velocity
     return {
-      x: ((b.p.x - a.p.x) / dt) * scale,
-      y: ((b.p.y - a.p.y) / dt) * scale,
-      z: ((b.p.z - a.p.z) / dt) * scale,
+      x: (b.p.x - a.p.x) / dt,
+      y: (b.p.y - a.p.y) / dt,
+      z: (b.p.z - a.p.z) / dt,
     };
   }
 
@@ -350,11 +374,18 @@ class BakeryGame {
     this.heldItem = null;
     this.holder   = null;
     document.getElementById('holding-indicator').style.display = 'none';
+
+    this._sfx('drop');
   }
 
   // ─── RAF LOOP ──────────────────────────────────────────────────
   tick() {
     const inVR = this.scene && this.scene.is('vr-mode');
+
+    // Spatial audio listener follows the head
+    if (window.bakeryAudio && this.camera) {
+      window.bakeryAudio.updateListener(this.camera.object3D);
+    }
 
     // Gaze hover highlight — desktop only. In VR, laser-controls raycasters
     // fire mouseenter/mouseleave on entities, which pickupable handles.
@@ -382,7 +413,8 @@ class BakeryGame {
       holdObj.getWorldPosition(worldPos);
       holdObj.getWorldQuaternion(worldQuat);
 
-      const off = (holder === this.camera) ? this.holdOffsetCamera : this.holdOffsetController;
+      const isCam = (holder === this.camera);
+      const off = isCam ? this.holdOffsetCamera : this.holdOffsetController;
       const offset = new THREE.Vector3(off.x, off.y, off.z);
       offset.applyQuaternion(worldQuat);
       worldPos.add(offset);
@@ -396,7 +428,15 @@ class BakeryGame {
       const localPos = worldPos.clone();
       if (parent) parent.worldToLocal(localPos);
       this.heldItem.object3D.position.copy(localPos);
-      this.heldItem.object3D.rotation.y += 0.025;
+
+      if (isCam) {
+        // Desktop: slow showcase spin (original behaviour)
+        this.heldItem.object3D.rotation.y += 0.025;
+      } else {
+        // VR: item follows the hand's yaw — stable, natural carrying
+        const e = new THREE.Euler().setFromQuaternion(worldQuat, 'YXZ');
+        this.heldItem.object3D.rotation.set(0, e.y, 0);
+      }
     }
 
     if (this.running) requestAnimationFrame(this.tick);
@@ -413,6 +453,7 @@ class BakeryGame {
 
   // ─── COMPLETION ────────────────────────────────────────────────
   showCompletion() {
+    this._sfx('victory');
     document.getElementById('completion-screen').style.display = 'flex';
     for (let i = 0; i < 25; i++) {
       setTimeout(() => this.spawnScreenSparkle(), i * 60);
@@ -475,7 +516,10 @@ class BakeryGame {
 }
 
 // ─── Reset ────────────────────────────────────────────────────────
-function resetGame() { location.reload(); }
+function resetGame() {
+  try { if (window.bakeryAudio) window.bakeryAudio.play('click'); } catch (e) {}
+  setTimeout(() => location.reload(), 150);
+}
 
 // ─── Init ─────────────────────────────────────────────────────────
 const sceneEl = document.querySelector('a-scene');
