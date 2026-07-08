@@ -1,15 +1,9 @@
 /**
- * items.js  —  Kawaii Bakery (FIXED v5 — VR)
+ * items.js  —  Kawaii Bakery (v6)
  *
- * Changes from v4:
- *  - ammo-shape now declares "fit: manual" (explicit halfExtents are given).
- *    Without it the shape defaulted to FIT.ALL and threw
- *    "Cannot use FIT.ALL without object3DMap.mesh" before meshes loaded.
- *  - Removed "shader: flat" from materials that also set emissive (flat
- *    shader has no emissive support → console warning spam). Emissive kept.
- *  - Removed invalid shader value on <a-text> (text uses its own shaders).
- *
- * Layout / counts / visuals unchanged from v4.
+ * Gameplay, layout, counts and visuals UNCHANGED from your v5.
+ * (VR grabbing fixes live in vr.js/game.js; item entities already carry the
+ * invisible raycast-hit geometry and manual-fit ammo shapes they need.)
  */
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -101,7 +95,6 @@ window.addEventListener('DOMContentLoaded', () => {
       box.setAttribute('height', '0.07');
       box.setAttribute('depth', '0.28');
       box.setAttribute('class', 'zone-visual');
-      // FIX: no "shader: flat" together with emissive
       box.setAttribute('material',
         'color: #ffd0e8; opacity: 0.5; transparent: true; emissive: #ff80c0; emissiveIntensity: 0.45');
       el.appendChild(box);
@@ -129,7 +122,7 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // ── Visual builder (all designs UNCHANGED except flat-shader fix) ──
+    // ── Visual builder (all designs unchanged) ──────────────────
     function buildVisual(type) {
       const group = document.createElement('a-entity');
 
@@ -210,7 +203,6 @@ window.addEventListener('DOMContentLoaded', () => {
             sp.setAttribute('radius', '0.012');
             const angle = (s / 5) * Math.PI * 2;
             sp.setAttribute('position', `${(Math.cos(angle) * 0.06).toFixed(3)} 0.14 ${(Math.sin(angle) * 0.06).toFixed(3)}`);
-            // FIX: emissive requires the standard shader — "shader: flat" removed
             sp.setAttribute('material', `color: ${colours[s % colours.length]}; emissive: ${colours[s % colours.length]}; emissiveIntensity: 0.6`);
             group.appendChild(sp);
           }
@@ -379,15 +371,12 @@ window.addEventListener('DOMContentLoaded', () => {
         ent.setAttribute('rotation', `0 ${Math.floor(Math.random() * 360)} 0`);
 
         // Kinematic physics — animation-driven until placed / thrown.
-        // FIX: fit: manual is REQUIRED with explicit halfExtents; the
-        // default (fit: all) needs a loaded mesh and threw
-        // "Cannot use FIT.ALL without object3DMap.mesh".
+        // fit: manual is required with explicit halfExtents.
         ent.setAttribute('ammo-body', 'type: kinematic; emitCollisionEvents: true');
         ent.setAttribute('ammo-shape', 'type: box; fit: manual; halfExtents: 0.12 0.1 0.12');
 
-        // Invisible collision geometry so raycasters can hit the parent entity
-        // directly (not just child meshes). This lets cursor/laser fire events
-        // on the .interactable entity where pickupable listens.
+        // Invisible collision geometry so raycasters can hit the parent
+        // entity directly (events fire where pickupable listens).
         ent.setAttribute('geometry', 'primitive: box; width: 0.28; height: 0.24; depth: 0.28');
         ent.setAttribute('material', 'opacity: 0; transparent: true; shader: flat');
 
