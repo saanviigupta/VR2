@@ -372,8 +372,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
         // Kinematic physics — animation-driven until placed / thrown.
         // fit: manual is required with explicit halfExtents.
-        ent.setAttribute('ammo-body', 'type: kinematic; emitCollisionEvents: true');
-        ent.setAttribute('ammo-shape', 'type: box; fit: manual; halfExtents: 0.12 0.1 0.12');
 
         // Invisible collision geometry so raycasters can hit the parent
         // entity directly (events fire where pickupable listens).
