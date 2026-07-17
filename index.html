@@ -8,11 +8,7 @@
   <!-- A-Frame core -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
-  <!-- Ammo.js WASM build — must load BEFORE the physics system script -->
-  <script src="https://cdn.jsdelivr.net/gh/MozillaReality/ammo.js@8bbc0ea/builds/ammo.wasm.js"></script>
 
-  <!-- Ammo.js physics bindings for A-Frame -->
-  <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system@4.0.1/dist/aframe-physics-system.min.js"></script>
 
   <!-- Game components (must load before the scene is parsed) -->
   <script src="js/components.js"></script>
@@ -131,7 +127,7 @@
 
 <!-- ═══════════ A-FRAME SCENE ═══════════ -->
 <a-scene
-  physics="driver: ammo; gravity: -9.8; debug: false"
+
   background="color: #ffe4f3"
   fog="type: linear; color: #ffe4f3; near: 12; far: 28"
   vr-mode-ui="enabled: true"
@@ -186,20 +182,13 @@
        game scene is cancelling the input system. -->
   <a-entity id="purple-test-block" class="interactable" item-type="purple-test"
     pickupable position="0.55 1.1 2.9"
-    ammo-body="type: kinematic; emitCollisionEvents: true"
-    ammo-shape="type: box; fit: manual; halfExtents: 0.06 0.06 0.06">
+
+>
     <a-box depth="0.12" height="0.12" width="0.12"
       material="color: #aa44ff; emissive: #7722cc; emissiveIntensity: 0.3"></a-box>
   </a-entity>
   <a-text value="PURPLE TEST\nany button near it" align="center"
     position="0.55 1.35 2.9" width="1.2" color="#cc99ff"></a-text>
-
-  <!-- In-VR log board (from grab-test) — shows every grab event live -->
-  <a-entity position="0 2.1 2.1">
-    <a-plane width="1.6" height="0.75" material="color: #000; opacity: 0.75"></a-plane>
-    <a-text id="vr-log-text" value="log board ready" align="center"
-      position="0 0 0.01" width="1.5" color="#0f0"></a-text>
-  </a-entity>
 
   <!-- ═══════════ LIGHTING ═══════════ -->
   <a-light type="ambient"     color="#ffe8f5" intensity="0.7"></a-light>
@@ -212,20 +201,20 @@
   <!-- Floor — static physics body so items don't fall through -->
   <a-plane position="0 0 0" rotation="-90 0 0" width="12" height="12"
     material="color: #ffd6ea; roughness: 0.8" shadow="receive: true"
-    ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 6 0.01 6"></a-plane>
+></a-plane>
   <a-plane position="0 0.001 0" rotation="-90 0 0" width="12" height="12"
     material="color: #ffadd4; wireframe: true; opacity: 0.15; shader: flat"></a-plane>
 
   <!-- Walls -->
   <a-box position="0 2.5 -6"  width="12" height="5" depth="0.2"
     material="color: #fff0f8; roughness: 0.9"
-    ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 6 2.5 0.1"></a-box>
+></a-box>
   <a-box position="-6 2.5 0"  width="0.2" height="5" depth="12"
     material="color: #ffe8f5; roughness: 0.9"
-    ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.1 2.5 6"></a-box>
+></a-box>
   <a-box position="6 2.5 0"   width="0.2" height="5" depth="12"
     material="color: #ffe8f5; roughness: 0.9"
-    ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.1 2.5 6"></a-box>
+></a-box>
   <a-box position="0 5 0"     width="12" height="0.2" depth="12"
     material="color: #fff5fb; roughness: 0.9"></a-box>
 
@@ -247,14 +236,14 @@
   <a-entity position="0 0 -1.5">
     <a-box position="0 0.55 0"   width="5" height="1.1" depth="0.9"
       material="color: #f5c6d8; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.5 0.55 0.45"></a-box>
+></a-box>
     <!-- Glass top (visual only) -->
     <a-box position="0 1.12 0"   width="5" height="0.06" depth="0.9"
       material="color: #d4f5ff; opacity: 0.5; transparent: true; roughness: 0.1"></a-box>
     <!-- Counter top physics surface -->
     <a-box position="0 1.12 0" width="5" height="0.06" depth="0.9"
       material="opacity: 0; transparent: true; shader: flat"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.5 0.03 0.45"></a-box>
+></a-box>
     <a-cylinder position="-2.3 0.2 -0.35" radius="0.06" height="0.4" material="color: #e8a0b8"></a-cylinder>
     <a-cylinder position=" 2.3 0.2 -0.35" radius="0.06" height="0.4" material="color: #e8a0b8"></a-cylinder>
     <a-cylinder position="-2.3 0.2  0.35" radius="0.06" height="0.4" material="color: #e8a0b8"></a-cylinder>
@@ -267,19 +256,19 @@
   <!-- Main Bakery Shelf (back wall) -->
   <a-entity id="main-shelf" position="0 0 -5.7">
     <a-box position="0 2.1 0"    width="5.5" height="4.2" depth="0.15" material="color: #f0b8cc; roughness: 0.7"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.75 2.1 0.075"></a-box>
+></a-box>
     <a-box position="0 0.8 0.15" width="5.2" height="0.08" depth="0.45" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.6 0.04 0.225"></a-box>
+></a-box>
     <a-box position="0 1.7 0.15" width="5.2" height="0.08" depth="0.45" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.6 0.04 0.225"></a-box>
+></a-box>
     <a-box position="0 2.6 0.15" width="5.2" height="0.08" depth="0.45" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.6 0.04 0.225"></a-box>
+></a-box>
     <a-box position="0 3.5 0.15" width="5.2" height="0.08" depth="0.45" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 2.6 0.04 0.225"></a-box>
+></a-box>
     <a-box position="-2.6 2.1 0.15" width="0.1" height="4.2" depth="0.45" material="color: #e090a8; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.05 2.1 0.225"></a-box>
+></a-box>
     <a-box position=" 2.6 2.1 0.15" width="0.1" height="4.2" depth="0.45" material="color: #e090a8; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.05 2.1 0.225"></a-box>
+></a-box>
     <a-sphere position="-2.6 3.9 0.15" radius="0.12" material="color: #ff6eb0; emissive: #ff4d9a; emissiveIntensity: 0.4"></a-sphere>
     <a-sphere position=" 2.6 3.9 0.15" radius="0.12" material="color: #ff6eb0; emissive: #ff4d9a; emissiveIntensity: 0.4"></a-sphere>
   </a-entity>
@@ -288,7 +277,7 @@
   <a-entity position="-4 0 -4.5">
     <a-box position="0 1.0 0"    width="1.6" height="2" depth="1.4"
       material="color: #f9d0e0; roughness: 0.5"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.8 1.0 0.7"></a-box>
+></a-box>
     <a-box position="0 0.8 0.71"  width="1.2" height="1" depth="0.05"  material="color: #ffc2d4; roughness: 0.3"></a-box>
     <a-box position="0 0.85 0.77" width="0.7" height="0.55" depth="0.02" material="color: #b8e8ff; opacity: 0.7; transparent: true; roughness: 0.1"></a-box>
     <a-box position="0 0.85 0.74" width="0.65" height="0.5" depth="0.01" material="color: #ffd580; emissive: #ffb830; emissiveIntensity: 0.6; opacity: 0.5; transparent: true"></a-box>
@@ -297,7 +286,7 @@
     <a-cylinder position="0.35 1.65 0.72"  radius="0.07" height="0.06" rotation="90 0 0" material="color: #ff9ab5"></a-cylinder>
     <a-box position="0 1.15 0.76" width="0.9" height="0.07" depth="0.07" material="color: #c0506a; roughness: 0.4"></a-box>
     <a-box position="0 2.02 0"    width="1.6" height="0.04" depth="1.4" material="color: #e0a0b8; roughness: 0.4"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.8 0.02 0.7"></a-box>
+></a-box>
     <a-cylinder position="-0.35 2.06 -0.2" radius="0.22" height="0.03" material="color: #cc7090; emissive: #992050; emissiveIntensity: 0.2"></a-cylinder>
     <a-cylinder position="0.35 2.06  0.2"  radius="0.22" height="0.03" material="color: #cc7090; emissive: #992050; emissiveIntensity: 0.2"></a-cylinder>
   </a-entity>
@@ -306,13 +295,13 @@
   <a-entity id="sink-entity" position="4.5 0 -4">
     <a-box position="0 0.55 0"  width="1.8" height="1.1" depth="1.2"
       material="color: #f0c8dc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.9 0.55 0.6"></a-box>
+></a-box>
     <a-box position="0 1.0 0"   width="1.4" height="0.12" depth="0.9" material="color: #d8f0f8; roughness: 0.2"></a-box>
     <a-box position="0 0.88 0"  width="1.2" height="0.25" depth="0.7" material="color: #c8e8f5; opacity: 0.7; transparent: true"></a-box>
     <!-- Sink top surface physics -->
     <a-box position="0 1.06 0" width="1.4" height="0.06" depth="0.9"
       material="opacity: 0; transparent: true; shader: flat"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.7 0.03 0.45"></a-box>
+></a-box>
     <a-cylinder position="0 1.35 -0.3"    radius="0.04" height="0.5"  material="color: #c0a0b0; metalness: 0.8; roughness: 0.2"></a-cylinder>
     <a-cylinder position="0 1.62 -0.18"   radius="0.035" height="0.32" rotation="70 0 0" material="color: #c0a0b0; metalness: 0.8; roughness: 0.2"></a-cylinder>
     <a-cylinder position="-0.25 1.2 -0.35" radius="0.06" height="0.06" material="color: #ff9ab5; roughness: 0.4"></a-cylinder>
@@ -325,7 +314,7 @@
   <a-entity position="-2 0 0.5">
     <a-box position="0 0.9 0"  width="2" height="0.08" depth="1.2"
       material="color: #fce0ec; roughness: 0.5"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 1 0.04 0.6"></a-box>
+></a-box>
     <a-cylinder position="-0.85 0.44 -0.5" radius="0.05" height="0.88" material="color: #e8a8bc"></a-cylinder>
     <a-cylinder position=" 0.85 0.44 -0.5" radius="0.05" height="0.88" material="color: #e8a8bc"></a-cylinder>
     <a-cylinder position="-0.85 0.44  0.5" radius="0.05" height="0.88" material="color: #e8a8bc"></a-cylinder>
@@ -336,13 +325,13 @@
   <a-entity position="5.85 0 -1">
     <a-box position="0 2.0 0"    width="0.15" height="3" depth="1.8"
       material="color: #f0b8cc; roughness: 0.7"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.075 1.5 0.9"></a-box>
+></a-box>
     <a-box position="-0.08 1.0 0" width="0.05" height="0.08" depth="1.6" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.025 0.04 0.8"></a-box>
+></a-box>
     <a-box position="-0.08 2.0 0" width="0.05" height="0.08" depth="1.6" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.025 0.04 0.8"></a-box>
+></a-box>
     <a-box position="-0.08 3.0 0" width="0.05" height="0.08" depth="1.6" material="color: #e8a8bc; roughness: 0.6"
-      ammo-body="type: static" ammo-shape="type: box; fit: manual; halfExtents: 0.025 0.04 0.8"></a-box>
+></a-box>
   </a-entity>
 
   <!-- ═══════════ AMBIENT DECOR ═══════════ -->
