@@ -22,14 +22,9 @@
 var VR_GRAB_RADIUS = 0.45;  // metres — hand-to-item grab reach (original)
 var VR_SNAP_RADIUS = 0.45;  // metres — item-to-zone snap distance on release
 
-/* ── in-VR log board (from grab-test) ─────────────────────────── */
-var LOG_LINES = [];
+/* ── console logging only (log board removed) ─────────────────── */
 function vrlog(msg) {
   console.log('[vr.js] ' + msg);
-  LOG_LINES.unshift(msg);
-  if (LOG_LINES.length > 8) LOG_LINES.pop();
-  var board = document.querySelector('#vr-log-text');
-  if (board) board.setAttribute('value', LOG_LINES.join('\n'));
 }
 
 /* ── helpers (from grab-test) ─────────────────────────────────── */
@@ -52,32 +47,61 @@ function vrHandEntity(handedness) {
   return document.querySelector(handedness === 'left' ? '#leftHand' : '#rightHand');
 }
 
-/* Direct attach/detach — LITERALLY the grab-test purple mechanism. */
+/* Direct attach/detach — LITERALLY the grab-test purple mechanism.
+   (Physics engine removed from the project entirely — nothing fights this.) */
 function vrAttachTo(item, hand) {
   if (item._held) return;
   item._held = true;
 
-  // Neutralize things that could fight the direct attach:
+  // Kill any position animations that could fight the attach:
   try { item.removeAttribute('animation__bob'); } catch (e) {}
   try { item.removeAttribute('animation__return'); } catch (e) {}
   try { item.removeAttribute('animation__snap'); } catch (e) {}
-  try {
-    if (item.components && item.components['ammo-body']) {
-      item.setAttribute('ammo-body', 'type', 'kinematic');
-    }
-  } catch (e) {}
 
   hand.object3D.attach(item.object3D);   // keeps world transform
   item.setAttribute('scale', '1.2 1.2 1.2');
-  vrlog((item.getAttribute('item-type') || 'item') + ' GRABBED ✔');
+  vrlog((item.getAttribute('item-type') || 'item') + ' GRABBED');
 }
 
 function vrDetachFrom(item) {
   if (!item._held) return;
   item._held = false;
-  item.sceneEl.object3D.attach(item.object3D);   // drop where released
+  item.sceneEl.object3D.attach(item.object3D);   // back to scene, in place
   item.setAttribute('scale', '1 1 1');
   vrlog((item.getAttribute('item-type') || 'item') + ' released');
+}
+
+/* Simple no-physics gravity: raycast straight down from the item and
+   animate it onto whatever surface is below (counter, table, floor). */
+function vrDropToSurface(item) {
+  try {
+    var pos = new THREE.Vector3();
+    item.object3D.getWorldPosition(pos);
+    var origin = pos.clone();
+    origin.y += 0.05;
+    var ray = new THREE.Raycaster(origin, new THREE.Vector3(0, -1, 0), 0, 10);
+    var hits = ray.intersectObject(item.sceneEl.object3D, true);
+    var floorY = 0.12; // default: floor
+    for (var i = 0; i < hits.length; i++) {
+      var el = hits[i].object && hits[i].object.el;
+      // Skip the item itself and other grabbable items
+      var skip = false;
+      var node = el;
+      while (node && node !== item.sceneEl) {
+        if (node === item || (node.classList && node.classList.contains('interactable'))) { skip = true; break; }
+        node = node.parentElement;
+      }
+      if (skip) continue;
+      floorY = hits[i].point.y + 0.12;
+      break;
+    }
+    item.setAttribute('animation__fall', {
+      property: 'position',
+      to: pos.x + ' ' + floorY + ' ' + pos.z,
+      dur: 300,
+      easing: 'easeInQuad',
+    });
+  } catch (e) { vrlog('drop error: ' + e.message); }
 }
 
 /* After a release: optional game placement. Never required for grabbing. */
@@ -208,11 +232,14 @@ AFRAME.registerComponent('purple-grab', {
           vrlog('nothing in reach');
         }
       } else if (!pressed && this._was[hand] && this._held[hand]) {
-        // Falling edge → detach in place, then optional shelf placement
+        // Falling edge → detach in place, then shelf placement or fall
         var held = this._held[hand];
         this._held[hand] = null;
         vrDetachFrom(held);
+        var placedBefore = held.components && held.components.pickupable && held.components.pickupable.isPlaced;
         vrTryZonePlacement(held);
+        var placedNow = held.components && held.components.pickupable && held.components.pickupable.isPlaced;
+        if (!placedNow && !placedBefore) vrDropToSurface(held);
       }
 
       this._was[hand] = pressed;
@@ -336,7 +363,7 @@ AFRAME.registerComponent('vr-mode-manager', {
         cursor.setAttribute('raycaster', 'enabled', false);
       }
       document.body.classList.add('in-vr');
-      vrlog('entered VR — try the purple block');
+      console.log('[vr.js] entered VR');
     });
 
     scene.addEventListener('exit-vr', function () {
