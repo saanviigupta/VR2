@@ -139,6 +139,7 @@
   fog="type: linear; color: #ffe4f3; near: 12; far: 28"
   vr-mode-ui="enabled: true"
   vr-mode-manager
+  vr-session-input
   renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true">
 
   <a-assets></a-assets>
@@ -156,7 +157,7 @@
         position="0 0 -1"
         geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.018"
         material="color: #ff6eb0; shader: flat; opacity: 0.9"
-        raycaster="objects: .interactable, .drop-zone; far: 6; interval: 30"
+        raycaster="objects: .interactable, .drop-zone, .vr-ui; far: 6; interval: 30"
         desktop-interactor>
       </a-entity>
     </a-entity>
@@ -166,18 +167,34 @@
          proximity grab + shelf snap + throw) on BOTH hands. -->
     <a-entity id="leftHand"
       laser-controls="hand: left"
-      raycaster="objects: .interactable, .drop-zone; far: 6; interval: 30"
+      raycaster="objects: .interactable, .drop-zone, .vr-ui; far: 6; interval: 30"
       xr-gamepad="hand: left"
       thumbstick-locomotion="speed: 2.2"
       vr-grab>
     </a-entity>
     <a-entity id="rightHand"
       laser-controls="hand: right"
-      raycaster="objects: .interactable, .drop-zone; far: 6; interval: 30"
+      raycaster="objects: .interactable, .drop-zone, .vr-ui; far: 6; interval: 30"
       xr-gamepad="hand: right"
       snap-turn="degrees: 45"
       vr-grab>
     </a-entity>
+  </a-entity>
+
+  <!-- ═══════════ AUDIO START PANEL (in-VR "play" button) ═══════════
+       Floats in front of the player's start position. Point the laser at it
+       and pull TRIGGER to start ambience, music and sound effects. It
+       dismisses itself automatically once audio starts by any route. -->
+  <a-entity id="audio-start" class="vr-ui" audio-start-panel position="0 1.5 1.9">
+    <a-plane width="0.9" height="0.45"
+      material="color: #ff6eb0; opacity: 0.92; emissive: #ff4d9a; emissiveIntensity: 0.35"
+      class="vr-ui-visual"></a-plane>
+    <a-plane width="0.96" height="0.51" position="0 0 -0.005"
+      material="color: #ffffff; opacity: 0.85"></a-plane>
+    <a-text value="&#9654;  Start Sound" align="center" position="0 0.06 0.01"
+      width="2.2" color="#ffffff"></a-text>
+    <a-text value="point laser + pull trigger" align="center" position="0 -0.1 0.01"
+      width="1.5" color="#ffe0f0"></a-text>
   </a-entity>
 
   <!-- ═══════════ LIGHTING ═══════════ -->
