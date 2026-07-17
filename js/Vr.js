@@ -1,32 +1,40 @@
 /**
- * 🍰 Kawaii Bakery — VR Support (v6 — PURPLE technique only)
+ * 🍰 Kawaii Bakery — VR Support (v7 — LITERAL grab-test purple code)
  * vr.js
  *
- * The grab-test proved the PURPLE method works on this headset:
- *   - controller pose read directly from the raw WebXR frame (gripSpace)
- *   - brute-force gamepad polling: ANY pressed button = grab
- *   - proximity: grabs the nearest grabbable within reach of the hand
- *   - release all buttons = release
+ * The purple cube grabbed fine in grab-test.html but not in the game, even
+ * though the input code was the same. The difference: in the game, grabbing
+ * routed through the game's pickup system (window.bakeryGame). So the game
+ * layer was eating the grab.
  *
- * This file implements ONLY that. Removed entirely: laser-controls,
- * raycasters on the hands, A-Frame button events, raw squeeze/select
- * handlers, super-hands, gaze grabbing in VR, the audio-start panel.
+ * v7 uses the EXACT grab-test mechanism, with zero game dependency:
+ *   - raw-pose: hand entities driven straight from the XR frame  (same)
+ *   - purple-grab: ANY button near an item → object3D.attach the item
+ *     to the hand; release all buttons → detach in place            (same)
+ *   - in-VR log board printing every event                          (same)
  *
- * Components:
- *   raw-pose             — drives each hand entity from the XR frame and
- *                          emits normalized thumbstick events
- *   purple-grab (scene)  — the any-button poll → grab/carry/release,
- *                          with shelf snap + physics drop via game.js
- *   thumbstick-locomotion / snap-turn — unchanged movement
- *   vr-mode-manager      — hides the desktop reticle while in VR
+ * Only AFTER a successful direct grab/release does it optionally talk to
+ * the game: on release, if the item sits within reach of its matching
+ * drop zone, the zone placement + score + sparkles run. If the game code
+ * isn't there or errors, grabbing itself still works regardless.
  */
 
-var VR_GRAB_RADIUS = 0.60;  // metres — hand-to-item grab reach
+var VR_GRAB_RADIUS = 0.45;  // metres — hand-to-item grab reach (original)
 var VR_SNAP_RADIUS = 0.45;  // metres — item-to-zone snap distance on release
 
-/* ── shared helper ─────────────────────────────────────────────── */
-function vrNearestByClass(className, worldPos, maxDist, filterFn) {
-  var els = document.querySelectorAll('.' + className);
+/* ── in-VR log board (from grab-test) ─────────────────────────── */
+var LOG_LINES = [];
+function vrlog(msg) {
+  console.log('[vr.js] ' + msg);
+  LOG_LINES.unshift(msg);
+  if (LOG_LINES.length > 8) LOG_LINES.pop();
+  var board = document.querySelector('#vr-log-text');
+  if (board) board.setAttribute('value', LOG_LINES.join('\n'));
+}
+
+/* ── helpers (from grab-test) ─────────────────────────────────── */
+function vrNearest(selector, worldPos, maxDist, filterFn) {
+  var els = document.querySelectorAll(selector);
   var best = null, bestD = maxDist;
   var p = new THREE.Vector3();
   for (var i = 0; i < els.length; i++) {
@@ -44,9 +52,63 @@ function vrHandEntity(handedness) {
   return document.querySelector(handedness === 'left' ? '#leftHand' : '#rightHand');
 }
 
+/* Direct attach/detach — LITERALLY the grab-test purple mechanism. */
+function vrAttachTo(item, hand) {
+  if (item._held) return;
+  item._held = true;
+
+  // Neutralize things that could fight the direct attach:
+  try { item.removeAttribute('animation__bob'); } catch (e) {}
+  try { item.removeAttribute('animation__return'); } catch (e) {}
+  try { item.removeAttribute('animation__snap'); } catch (e) {}
+  try {
+    if (item.components && item.components['ammo-body']) {
+      item.setAttribute('ammo-body', 'type', 'kinematic');
+    }
+  } catch (e) {}
+
+  hand.object3D.attach(item.object3D);   // keeps world transform
+  item.setAttribute('scale', '1.2 1.2 1.2');
+  vrlog((item.getAttribute('item-type') || 'item') + ' GRABBED ✔');
+}
+
+function vrDetachFrom(item) {
+  if (!item._held) return;
+  item._held = false;
+  item.sceneEl.object3D.attach(item.object3D);   // drop where released
+  item.setAttribute('scale', '1 1 1');
+  vrlog((item.getAttribute('item-type') || 'item') + ' released');
+}
+
+/* After a release: optional game placement. Never required for grabbing. */
+function vrTryZonePlacement(item) {
+  try {
+    var pos = new THREE.Vector3();
+    item.object3D.getWorldPosition(pos);
+    var zone = vrNearest('.drop-zone', pos, VR_SNAP_RADIUS, function (el) {
+      var dz = el.components && el.components['drop-zone'];
+      return !(dz && dz.filled);
+    });
+    if (!zone) return;
+
+    var itemType = item.getAttribute('item-type');
+    var zoneType = zone.getAttribute('zone-type');
+    if (itemType === zoneType && window.bakeryGame) {
+      window.bakeryGame.placeItemCorrectly(item, zone);
+      vrlog(itemType + ' PLACED on shelf ✨');
+    } else if (itemType !== zoneType) {
+      vrlog('wrong shelf for ' + itemType);
+      var visual = zone.querySelector('.zone-visual');
+      if (visual) {
+        visual.setAttribute('material', 'color', '#ff8888');
+        setTimeout(function () { visual.setAttribute('material', 'color', '#ffd0e8'); }, 450);
+      }
+    }
+  } catch (e) { vrlog('placement error: ' + e.message); }
+}
+
 /* ─────────────────────────────────────────────
- * RAW-POSE — entity transform straight from the XR frame,
- * plus normalized thumbstick events for locomotion / snap-turn.
+ * RAW-POSE — from grab-test, plus thumbstick events
  * ───────────────────────────────────────────── */
 AFRAME.registerComponent('raw-pose', {
   schema: { hand: { type: 'string', default: 'left' } },
@@ -71,7 +133,6 @@ AFRAME.registerComponent('raw-pose', {
       var s = session.inputSources[i];
       if (s.handedness !== this.data.hand) continue;
 
-      // Pose
       if (s.gripSpace) {
         var pose = frame.getPose(s.gripSpace, ref);
         if (pose) {
@@ -81,13 +142,11 @@ AFRAME.registerComponent('raw-pose', {
           this.el.object3D.quaternion.copy(this._q);
           if (!this._on) {
             this._on = true;
-            console.log('[vr.js] ' + this.data.hand + ' pose tracking OK');
+            vrlog(this.data.hand + ' pose tracking OK');
           }
         }
       }
 
-      // Thumbstick (xr-standard: axes [2,3]; some layouts [0,1] — the
-      // unused pair reads 0 so summing handles both)
       if (s.gamepad) {
         var gp = s.gamepad;
         var x = (gp.axes[0] || 0) + (gp.axes.length > 2 ? (gp.axes[2] || 0) : 0);
@@ -103,22 +162,15 @@ AFRAME.registerComponent('raw-pose', {
 });
 
 /* ─────────────────────────────────────────────
- * PURPLE-GRAB (on <a-scene>) — the winning technique.
- *
- * Every tick, for each hand: if ANY gamepad button just became pressed and
- * the hand is near a grabbable item → game.pickUpItem (item follows the
- * hand via game.js's tick). When ALL buttons release → snap to the nearest
- * open drop zone within reach of the ITEM, else drop with physics/throw.
- *
- * NOTE: buttons include grip, trigger, A/B/X/Y and thumbstick-click.
- * Thumbstick TILT (movement/turning) is an axis, not a button, so walking
- * while carrying works fine.
+ * PURPLE-GRAB (on <a-scene>) — LITERAL grab-test poll-grab, but the
+ * grabbable set is every .interactable (all bakery items + purple block).
  * ───────────────────────────────────────────── */
 AFRAME.registerComponent('purple-grab', {
   init: function () {
     this._was  = { left: false, right: false };
     this._held = { left: null,  right: null  };
     this._p = new THREE.Vector3();
+    vrlog('purple-grab armed');
   },
 
   tick: function () {
@@ -127,8 +179,6 @@ AFRAME.registerComponent('purple-grab', {
     if (!renderer || !renderer.xr || !renderer.xr.isPresenting) return;
     var session = renderer.xr.getSession();
     if (!session) return;
-    var game = window.bakeryGame;
-    if (!game) return;
 
     for (var i = 0; i < session.inputSources.length; i++) {
       var s = session.inputSources[i];
@@ -137,42 +187,32 @@ AFRAME.registerComponent('purple-grab', {
       var ent = vrHandEntity(hand);
       if (!ent) continue;
 
-      // ANY button pressed?
       var pressed = false;
       for (var b = 0; b < s.gamepad.buttons.length; b++) {
         if (s.gamepad.buttons[b].pressed) { pressed = true; break; }
       }
 
       if (pressed && !this._was[hand]) {
-        // Rising edge → try to grab the nearest free item
+        // Rising edge → grab nearest free item (grab-test mechanism)
         ent.object3D.getWorldPosition(this._p);
-        var target = vrNearestByClass('interactable', this._p, VR_GRAB_RADIUS,
-          function (el) {
-            var pc = el.components && el.components.pickupable;
-            return !(pc && pc.isPlaced);
-          });
-        if (target && game.heldItem !== target) {
-          game.pickUpItem(target, ent);
-          this._held[hand] = target;
+        vrlog('button on ' + hand);
+        var item = vrNearest('.interactable', this._p, VR_GRAB_RADIUS, function (el) {
+          if (el._held) return false;
+          var pc = el.components && el.components.pickupable;
+          return !(pc && pc.isPlaced);
+        });
+        if (item) {
+          vrAttachTo(item, ent);
+          this._held[hand] = item;
+        } else {
+          vrlog('nothing in reach');
         }
       } else if (!pressed && this._was[hand] && this._held[hand]) {
-        // Falling edge → place or drop
-        var item = this._held[hand];
+        // Falling edge → detach in place, then optional shelf placement
+        var held = this._held[hand];
         this._held[hand] = null;
-        if (game.heldItem === item && game.holder === ent) {
-          item.object3D.getWorldPosition(this._p);
-          var zone = vrNearestByClass('drop-zone', this._p, VR_SNAP_RADIUS,
-            function (el) {
-              var dz = el.components && el.components['drop-zone'];
-              return !(dz && dz.filled);
-            });
-          if (zone) {
-            game.tryPlace(zone);
-          }
-          if (game.heldItem === item) {
-            game.releaseHeldWithPhysics();
-          }
-        }
+        vrDetachFrom(held);
+        vrTryZonePlacement(held);
       }
 
       this._was[hand] = pressed;
@@ -284,7 +324,6 @@ AFRAME.registerComponent('snap-turn', {
 
 /* ─────────────────────────────────────────────
  * DESKTOP ↔ VR MODE MANAGER (on <a-scene>)
- * Hides the desktop reticle in VR (no lasers exist anymore).
  * ───────────────────────────────────────────── */
 AFRAME.registerComponent('vr-mode-manager', {
   init: function () {
@@ -297,7 +336,7 @@ AFRAME.registerComponent('vr-mode-manager', {
         cursor.setAttribute('raycaster', 'enabled', false);
       }
       document.body.classList.add('in-vr');
-      console.log('[vr.js] Entered VR — purple grab active');
+      vrlog('entered VR — try the purple block');
     });
 
     scene.addEventListener('exit-vr', function () {
@@ -307,7 +346,7 @@ AFRAME.registerComponent('vr-mode-manager', {
         cursor.setAttribute('raycaster', 'enabled', true);
       }
       document.body.classList.remove('in-vr');
-      console.log('[vr.js] Exited VR — desktop mode restored');
+      console.log('[vr.js] Exited VR');
     });
   },
 });
