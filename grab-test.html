@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Grab Test — 7 Techniques</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <!-- Extra libs used ONLY by the BLUE cube (super-hands) -->
+  <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/super-hands@3.0.3/dist/super-hands.min.js"></script>
+
+  <script>
+  /* ═════════════════════════════════════════════════════════════════
+     GRAB TEST — seven cubes, seven grab techniques, zero game code.
+
+     RED     — raw WebXR session `squeezestart` + proximity (pose read
+               directly from the XR frame each tick)
+     ORANGE  — raw WebXR session `selectstart` (TRIGGER) + proximity
+     YELLOW  — A-Frame oculus-touch-controls `gripdown` event + proximity
+               (uses the entity transform A-Frame maintains)
+     GREEN   — laser-controls `click`: point laser at cube, pull TRIGGER
+     BLUE    — super-hands library: touch cube with controller, hold GRIP
+     PURPLE  — brute-force gamepad polling: ANY button while controller
+               overlaps the cube's bounding sphere
+     WHITE   — head-gaze fuse cursor: stare at the cube for 1.5 s
+               (no controller involved at all)
+
+     Grabbed cubes parent to the grabbing controller (or camera for WHITE)
+     and release on the matching button-up. The log board in front of you
+     prints every event so no console is needed.
+     ═════════════════════════════════════════════════════════════════ */
+
+  var LOG_LINES = [];
+  function vrlog(msg) {
+    console.log('[grab-test] ' + msg);
+    LOG_LINES.unshift(msg);
+    if (LOG_LINES.length > 8) LOG_LINES.pop();
+    var board = document.querySelector('#log-text');
+    if (board) board.setAttribute('value', LOG_LINES.join('\n'));
+  }
+
+  function handEntity(handedness) {
+    return document.querySelector(handedness === 'left' ? '#leftHand' : '#rightHand');
+  }
+
+  /* Generic attach/detach used by RED, ORANGE, YELLOW, PURPLE, WHITE */
+  function attachTo(cube, holder) {
+    if (cube._held) return;
+    cube._held = true;
+    cube._prevParent = cube.object3D.parent;
+    holder.object3D.attach(cube.object3D);   // keeps world transform
+    cube.setAttribute('scale', '1.3 1.3 1.3');
+    vrlog(cube.dataset.label + ' GRABBED ✔');
+  }
+  function detachFrom(cube) {
+    if (!cube._held) return;
+    cube._held = false;
+    var sceneObj = cube.sceneEl.object3D;
+    sceneObj.attach(cube.object3D);          // drop where released
+    cube.setAttribute('scale', '1 1 1');
+    vrlog(cube.dataset.label + ' released');
+  }
+  function nearest(selector, worldPos, maxDist) {
+    var els = document.querySelectorAll(selector);
+    var best = null, bestD = maxDist;
+    var p = new THREE.Vector3();
+    for (var i = 0; i < els.length; i++) {
+      els[i].object3D.getWorldPosition(p);
+      var d = p.distanceTo(worldPos);
+      if (d < bestD) { bestD = d; best = els[i]; }
+    }
+    return best;
+  }
+
+  /* ── TECHNIQUE 1+2 (RED squeeze / ORANGE trigger): raw session events,
+        pose driven straight from the XR frame ─────────────────────── */
+  AFRAME.registerComponent('raw-xr-rig', {
+    init: function () {
+      var sceneEl = this.el;
+      var held = { left: null, right: null };   // per-hand held cube (RED)
+      var heldT = { left: null, right: null };  // per-hand held cube (ORANGE)
+
+      sceneEl.addEventListener('enter-vr', function () {
+        var xr = sceneEl.renderer && sceneEl.renderer.xr;
+        var session = xr && xr.getSession();
+        if (!session) { vrlog('no XR session?!'); return; }
+        vrlog('session bound — try the cubes!');
+
+        session.addEventListener('squeezestart', function (e) {
+          var hand = e.inputSource.handedness;
+          var ent = handEntity(hand);
+          vrlog('squeezestart (' + hand + ')');
+          var pos = new THREE.Vector3();
+          ent.object3D.getWorldPosition(pos);
+          var cube = nearest('.grab-red', pos, 0.45);
+          if (cube) { attachTo(cube, ent); held[hand] = cube; }
+        });
+        session.addEventListener('squeezeend', function (e) {
+          var hand = e.inputSource.handedness;
+          if (held[hand]) { detachFrom(held[hand]); held[hand] = null; }
+        });
+
+        session.addEventListener('selectstart', function (e) {
+          var hand = e.inputSource.handedness;
+          var ent = handEntity(hand);
+          vrlog('selectstart (' + hand + ')');
+          var pos = new THREE.Vector3();
+          ent.object3D.getWorldPosition(pos);
+          var cube = nearest('.grab-orange', pos, 0.45);
+          if (cube) { attachTo(cube, ent); heldT[hand] = cube; }
+        });
+        session.addEventListener('selectend', function (e) {
+          var hand = e.inputSource.handedness;
+          if (heldT[hand]) { detachFrom(heldT[hand]); heldT[hand] = null; }
+        });
+      });
+    },
+  });
+
+  /* Drives each hand entity's pose directly from the raw XR frame.
+     RED/ORANGE/PURPLE proximity all depend on this being correct. */
+  AFRAME.registerComponent('raw-pose', {
+    schema: { hand: { type: 'string' } },
+    init: function () { this._q = new THREE.Quaternion(); this._on = false; },
+    tick: function () {
+      var sceneEl = this.el.sceneEl;
+      var renderer = sceneEl.renderer;
+      if (!renderer || !renderer.xr || !renderer.xr.isPresenting) return;
+      var session = renderer.xr.getSession();
+      var frame = sceneEl.frame;
+      var ref = renderer.xr.getReferenceSpace();
+      if (!session || !frame || !ref) return;
+      for (var i = 0; i < session.inputSources.length; i++) {
+        var s = session.inputSources[i];
+        if (s.handedness !== this.data.hand || !s.gripSpace) continue;
+        var pose = frame.getPose(s.gripSpace, ref);
+        if (!pose) return;
+        var p = pose.transform.position, o = pose.transform.orientation;
+        this.el.object3D.position.set(p.x, p.y, p.z);
+        this._q.set(o.x, o.y, o.z, o.w);
+        this.el.object3D.quaternion.copy(this._q);
+        if (!this._on) { this._on = true; vrlog(this.data.hand + ' pose tracking OK'); }
+        return;
+      }
+    },
+  });
+
+  /* ── TECHNIQUE 3 (YELLOW): A-Frame oculus-touch-controls gripdown ── */
+  AFRAME.registerComponent('aframe-grip-grab', {
+    init: function () {
+      var el = this.el;
+      var held = null;
+      el.addEventListener('gripdown', function () {
+        vrlog('A-Frame gripdown fired');
+        var pos = new THREE.Vector3();
+        el.object3D.getWorldPosition(pos);
+        var cube = nearest('.grab-yellow', pos, 0.45);
+        if (cube) { attachTo(cube, el); held = cube; }
+      });
+      el.addEventListener('gripup', function () {
+        if (held) { detachFrom(held); held = null; }
+      });
+    },
+  });
+
+  /* ── TECHNIQUE 4 (GREEN): laser click ─────────────────────────────
+        Grab on click, release on second click. */
+  AFRAME.registerComponent('laser-click-grab', {
+    init: function () {
+      var cube = this.el;
+      cube.addEventListener('click', function (e) {
+        vrlog('laser click on GREEN');
+        if (!cube._held) {
+          var holder = (e.detail && e.detail.cursorEl) || document.querySelector('#rightHand');
+          attachTo(cube, holder);
+        } else {
+          detachFrom(cube);
+        }
+      });
+    },
+  });
+
+  /* ── TECHNIQUE 6 (PURPLE): brute-force polling — ANY pressed button
+        while the controller overlaps the cube ────────────────────── */
+  AFRAME.registerComponent('poll-grab', {
+    init: function () {
+      this._held = { left: null, right: null };
+      this._was = { left: false, right: false };
+      this._p = new THREE.Vector3();
+    },
+    tick: function () {
+      var sceneEl = this.el.sceneEl;
+      var renderer = sceneEl.renderer;
+      if (!renderer || !renderer.xr || !renderer.xr.isPresenting) return;
+      var session = renderer.xr.getSession();
+      if (!session) return;
+      for (var i = 0; i < session.inputSources.length; i++) {
+        var s = session.inputSources[i];
+        if (!s.gamepad || !s.handedness || s.handedness === 'none') continue;
+        var hand = s.handedness;
+        var pressed = false;
+        for (var b = 0; b < s.gamepad.buttons.length; b++) {
+          if (s.gamepad.buttons[b].pressed) { pressed = true; break; }
+        }
+        var ent = handEntity(hand);
+        if (!ent) continue;
+        if (pressed && !this._was[hand]) {
+          ent.object3D.getWorldPosition(this._p);
+          var cube = nearest('.grab-purple', this._p, 0.45);
+          if (cube) {
+            vrlog('poll: button on ' + hand);
+            attachTo(cube, ent);
+            this._held[hand] = cube;
+          }
+        } else if (!pressed && this._was[hand] && this._held[hand]) {
+          detachFrom(this._held[hand]);
+          this._held[hand] = null;
+        }
+        this._was[hand] = pressed;
+      }
+    },
+  });
+
+  /* ── TECHNIQUE 7 (WHITE): head-gaze fuse — stare 1.5 s ───────────── */
+  AFRAME.registerComponent('gaze-grab', {
+    init: function () {
+      var cube = this.el;
+      cube.addEventListener('click', function () {
+        vrlog('gaze fuse on WHITE');
+        if (!cube._held) attachTo(cube, document.querySelector('#head'));
+        else detachFrom(cube);
+      });
+    },
+  });
+  </script>
+
+  <style>body { margin: 0; }</style>
+</head>
+<body>
+
+<a-scene background="color: #223" raw-xr-rig poll-grab vr-mode-ui="enabled: true">
+
+  <a-entity id="player" position="0 0 0">
+    <a-entity id="head" camera look-controls position="0 1.65 0">
+      <!-- Gaze fuse cursor for WHITE cube only -->
+      <a-entity cursor="fuse: true; fuseTimeout: 1500"
+        position="0 0 -1"
+        geometry="primitive: ring; radiusInner: 0.008; radiusOuter: 0.014"
+        material="color: #ffffff; shader: flat"
+        raycaster="objects: .grab-white; far: 6; interval: 60">
+      </a-entity>
+    </a-entity>
+
+    <!-- BOTH poses driven: A-Frame's oculus-touch-controls AND raw-pose.
+         raw-pose overwrites the transform every tick, so proximity is
+         always right even if A-Frame's binding fails. -->
+    <a-entity id="leftHand"
+      oculus-touch-controls="hand: left"
+      laser-controls="hand: left"
+      raycaster="objects: .grab-green; far: 6; interval: 30"
+      raw-pose="hand: left"
+      aframe-grip-grab>
+    </a-entity>
+    <a-entity id="rightHand"
+      oculus-touch-controls="hand: right"
+      laser-controls="hand: right"
+      raycaster="objects: .grab-green; far: 6; interval: 30"
+      raw-pose="hand: right"
+      aframe-grip-grab
+      super-hands="colliderEvent: raycaster-intersection;
+                   colliderEventProperty: els;
+                   colliderEndEvent: raycaster-intersection-cleared;
+                   colliderEndEventProperty: clearedEls;
+                   grabStartButtons: gripdown;
+                   grabEndButtons: gripup">
+    </a-entity>
+  </a-entity>
+
+  <a-light type="ambient" intensity="0.8"></a-light>
+  <a-light type="directional" position="1 3 2" intensity="0.6"></a-light>
+
+  <!-- Floor (visual only, no physics anywhere in this test) -->
+  <a-plane rotation="-90 0 0" width="10" height="10" material="color: #334"></a-plane>
+
+  <!-- ═════ LOG BOARD — floats in front of spawn ═════ -->
+  <a-entity position="0 1.9 -1.4">
+    <a-plane width="1.6" height="0.75" material="color: #000; opacity: 0.75"></a-plane>
+    <a-text id="log-text" value="log board ready\nenter VR and try each cube"
+      align="center" position="0 0 0.01" width="1.5" color="#0f0"></a-text>
+  </a-entity>
+
+  <!-- ═════ THE 7 CUBES — arc around spawn, arm's reach, waist height ═════
+       Each is 12 cm, ~55 cm from your body. Labels float above each. -->
+
+  <!-- 1 RED: raw squeezestart + proximity -->
+  <a-box class="grab-red" data-label="RED (raw squeeze)" position="-0.55 1.1 -0.35"
+    depth="0.12" height="0.12" width="0.12" material="color: #ff3333"></a-box>
+  <a-text value="RED\nsqueeze GRIP near it" align="center" position="-0.55 1.35 -0.35" width="1.2" color="#ff8888"></a-text>
+
+  <!-- 2 ORANGE: raw selectstart (trigger) + proximity -->
+  <a-box class="grab-orange" data-label="ORANGE (raw trigger)" position="-0.35 1.1 -0.55"
+    depth="0.12" height="0.12" width="0.12" material="color: #ff9922"></a-box>
+  <a-text value="ORANGE\npull TRIGGER near it" align="center" position="-0.35 1.35 -0.55" width="1.2" color="#ffcc88"></a-text>
+
+  <!-- 3 YELLOW: A-Frame gripdown event + proximity -->
+  <a-box class="grab-yellow" data-label="YELLOW (A-Frame grip)" position="-0.12 1.1 -0.65"
+    depth="0.12" height="0.12" width="0.12" material="color: #ffee33"></a-box>
+  <a-text value="YELLOW\nsqueeze GRIP near it" align="center" position="-0.12 1.35 -0.65" width="1.2" color="#ffff99"></a-text>
+
+  <!-- 4 GREEN: laser click (point + trigger) -->
+  <a-box class="grab-green" data-label="GREEN (laser click)" position="0.12 1.1 -0.65"
+    depth="0.12" height="0.12" width="0.12" material="color: #33dd55" laser-click-grab></a-box>
+  <a-text value="GREEN\npoint LASER + trigger\n(click again to drop)" align="center" position="0.12 1.4 -0.65" width="1.2" color="#88ffaa"></a-text>
+
+  <!-- 5 BLUE: super-hands library (right hand only) -->
+  <a-box class="grab-blue" data-label="BLUE (super-hands)" position="0.35 1.1 -0.55"
+    depth="0.12" height="0.12" width="0.12" material="color: #3388ff"
+    grabbable="startButtons: gripdown; endButtons: gripup" hoverable></a-box>
+  <a-text value="BLUE\nRIGHT laser on it +\nhold GRIP" align="center" position="0.35 1.4 -0.55" width="1.2" color="#88bbff"></a-text>
+
+  <!-- 6 PURPLE: brute-force polling, ANY button near it -->
+  <a-box class="grab-purple" data-label="PURPLE (any button poll)" position="0.55 1.1 -0.35"
+    depth="0.12" height="0.12" width="0.12" material="color: #aa44ff"></a-box>
+  <a-text value="PURPLE\nANY button near it" align="center" position="0.55 1.35 -0.35" width="1.2" color="#cc99ff"></a-text>
+
+  <!-- 7 WHITE: head-gaze fuse, no controller -->
+  <a-box class="grab-white" data-label="WHITE (gaze fuse)" position="0 1.35 -0.8"
+    depth="0.12" height="0.12" width="0.12" material="color: #ffffff" gaze-grab></a-box>
+  <a-text value="WHITE\nSTARE at it 1.5s\n(no controller)" align="center" position="0 1.62 -0.8" width="1.2" color="#dddddd"></a-text>
+
+</a-scene>
+</body>
+</html>
