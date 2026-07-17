@@ -143,7 +143,7 @@
 
   <!-- ═══════════ CAMERA RIG + PLAYER ═══════════ -->
   <a-entity id="player"
-    position="0 0 3.5"
+    position="0 0 -0.2"
     wasd-controls="acceleration: 25">
     <a-entity camera
       id="head"
@@ -185,14 +185,14 @@
        item-specific; if this block stops grabbing here, something in the
        game scene is cancelling the input system. -->
   <a-entity id="purple-test-block" class="interactable" item-type="purple-test"
-    pickupable position="0.55 1.1 2.9"
+    pickupable position="0.45 1.1 -0.6"
     ammo-body="type: kinematic; emitCollisionEvents: true"
     ammo-shape="type: box; fit: manual; halfExtents: 0.06 0.06 0.06">
     <a-box depth="0.12" height="0.12" width="0.12"
       material="color: #aa44ff; emissive: #7722cc; emissiveIntensity: 0.3"></a-box>
   </a-entity>
   <a-text value="PURPLE TEST\nany button near it" align="center"
-    position="0.55 1.35 2.9" width="1.2" color="#cc99ff"></a-text>
+    position="0.45 1.35 -0.6" width="1.2" color="#cc99ff"></a-text>
 
   <!-- ═══════════ LIGHTING ═══════════ -->
   <a-light type="ambient"     color="#ffe8f5" intensity="0.7"></a-light>
