@@ -21,7 +21,7 @@
  *   vr-mode-manager      — hides the desktop reticle while in VR
  */
 
-var VR_GRAB_RADIUS = 0.45;  // metres — hand-to-item grab reach
+var VR_GRAB_RADIUS = 0.60;  // metres — hand-to-item grab reach
 var VR_SNAP_RADIUS = 0.45;  // metres — item-to-zone snap distance on release
 
 /* ── shared helper ─────────────────────────────────────────────── */
