@@ -16,10 +16,8 @@
 
   <!-- Game components (must load before the scene is parsed) -->
   <script src="js/components.js"></script>
-  <!-- VR: controllers, locomotion, snap-turn, proximity grab -->
+  <!-- VR: purple-grab (any-button proximity grab), locomotion, snap-turn -->
   <script src="js/vr.js"></script>
-  <!-- Audio: procedural ambience, music and SFX (no external files) -->
-  <script src="js/audio.js"></script>
 
   <style>
     body { margin: 0; overflow: hidden; background: #ffe0f0; font-family: 'Comic Sans MS', cursive; }
@@ -112,10 +110,9 @@
     <u>VR (Quest)</u><br>
     Left stick — Move<br>
     Right stick — Snap turn 45°<br>
-    Grip near an item — Grab it<br>
-    Release grip over a shelf — Place<br>
-    Release anywhere else — Drop / throw!<br>
-    Trigger + laser — Pick up / place from afar<br>
+    Reach near an item + press <strong>ANY button</strong> — Grab<br>
+    Hold to carry · release over a shelf — Place<br>
+    Release anywhere else — Drop<br>
     <br>
     Tidy the bakery! ✨
   </div>
@@ -139,7 +136,7 @@
   fog="type: linear; color: #ffe4f3; near: 12; far: 28"
   vr-mode-ui="enabled: true"
   vr-mode-manager
-  vr-session-input
+  purple-grab
   renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true">
 
   <a-assets></a-assets>
@@ -157,45 +154,45 @@
         position="0 0 -1"
         geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.018"
         material="color: #ff6eb0; shader: flat; opacity: 0.9"
-        raycaster="objects: .interactable, .drop-zone, .vr-ui; far: 6; interval: 30"
+        raycaster="objects: .interactable, .drop-zone; far: 6; interval: 30"
         desktop-interactor>
       </a-entity>
     </a-entity>
 
-    <!-- VR CONTROLLERS: laser-controls (pose/model/laser/trigger→click),
-         xr-gamepad (fallback input polling with dedup), vr-grab (grip
-         proximity grab + shelf snap + throw) on BOTH hands. -->
+    <!-- VR CONTROLLERS — PURPLE technique only.
+         oculus-touch-controls provides the visible controller models;
+         raw-pose overrides their transform from the raw WebXR frame every
+         tick, so the models always track your real hands regardless of
+         whether A-Frame's profile binding works. No lasers, no raycasters.
+         Grabbing is handled by purple-grab on the scene. -->
     <a-entity id="leftHand"
-      laser-controls="hand: left"
-      raycaster="objects: .interactable, .drop-zone, .vr-ui; far: 6; interval: 30"
-      xr-gamepad="hand: left"
-      thumbstick-locomotion="speed: 2.2"
-      vr-grab>
+      oculus-touch-controls="hand: left"
+      raw-pose="hand: left"
+      thumbstick-locomotion="speed: 2.2">
     </a-entity>
     <a-entity id="rightHand"
-      laser-controls="hand: right"
-      raycaster="objects: .interactable, .drop-zone, .vr-ui; far: 6; interval: 30"
-      xr-gamepad="hand: right"
-      snap-turn="degrees: 45"
-      vr-grab>
+      oculus-touch-controls="hand: right"
+      raw-pose="hand: right"
+      snap-turn="degrees: 45">
     </a-entity>
   </a-entity>
 
-  <!-- ═══════════ AUDIO START PANEL (in-VR "play" button) ═══════════
-       Floats in front of the player's start position. Point the laser at it
-       and pull TRIGGER to start ambience, music and sound effects. It
-       dismisses itself automatically once audio starts by any route. -->
-  <a-entity id="audio-start" class="vr-ui" audio-start-panel position="0 1.5 1.9">
-    <a-plane width="0.9" height="0.45"
-      material="color: #ff6eb0; opacity: 0.92; emissive: #ff4d9a; emissiveIntensity: 0.35"
-      class="vr-ui-visual"></a-plane>
-    <a-plane width="0.96" height="0.51" position="0 0 -0.005"
-      material="color: #ffffff; opacity: 0.85"></a-plane>
-    <a-text value="&#9654;  Start Sound" align="center" position="0 0.06 0.01"
-      width="2.2" color="#ffffff"></a-text>
-    <a-text value="point laser + pull trigger" align="center" position="0 -0.1 0.01"
-      width="1.5" color="#ffe0f0"></a-text>
+  <!-- ═══════════ PURPLE TEST BLOCK (canary) ═══════════
+       The EXACT block from the grab test, placed next to spawn. It is a
+       normal .interactable with pickupable + the same kinematic ammo body
+       the baked goods use, so it runs through the IDENTICAL purple grab
+       path. If this block grabs but the baked goods don't, the problem is
+       item-specific; if this block stops grabbing here, something in the
+       game scene is cancelling the input system. -->
+  <a-entity id="purple-test-block" class="interactable" item-type="purple-test"
+    pickupable position="0.55 1.1 2.9"
+    ammo-body="type: kinematic; emitCollisionEvents: true"
+    ammo-shape="type: box; fit: manual; halfExtents: 0.06 0.06 0.06">
+    <a-box depth="0.12" height="0.12" width="0.12"
+      material="color: #aa44ff; emissive: #7722cc; emissiveIntensity: 0.3"></a-box>
   </a-entity>
+  <a-text value="PURPLE TEST\nany button near it" align="center"
+    position="0.55 1.35 2.9" width="1.2" color="#cc99ff"></a-text>
 
   <!-- ═══════════ LIGHTING ═══════════ -->
   <a-light type="ambient"     color="#ffe8f5" intensity="0.7"></a-light>
