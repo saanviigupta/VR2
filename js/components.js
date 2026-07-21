@@ -193,9 +193,7 @@ AFRAME.registerComponent('drop-zone', {
       const visual = this.el.querySelector('.zone-visual');
       if (visual) {
         const zoneColors = {
-          croissant: '#ffb830', cupcake: '#ff60b0', donut: '#ff70c0',
-          bread: '#e08820', pastry: '#ff60b0', cookie: '#c08820',
-          macaron: '#a060e0', muffin: '#ff80b0', brownie: '#8a5020'
+          croissant: '#ffb830', pastry: '#ff60b0', bread: '#e08820', dish: '#60c0ff', decoration: '#ff60b0'
         };
         visual.setAttribute('material', 'emissive', zoneColors[this.zoneType] || '#ffffff');
         visual.setAttribute('material', 'emissiveIntensity', 0.4);
@@ -233,43 +231,6 @@ AFRAME.registerComponent('drop-zone', {
       loop: 2,
       easing: 'easeInOutSine',
     });
-  },
-
-  // Correct placement → bright GREEN for 10 seconds, then settle to a
-  // calm filled-green. The zone stays "filled" (locked) the whole time.
-  flashGreen: function () {
-    this.filled = true;
-    const visual = this.el.querySelector('.zone-visual');
-    if (!visual) return;
-    visual.removeAttribute('animation__pulse');
-    visual.setAttribute('material', 'color', '#66ff99');
-    visual.setAttribute('material', 'emissive', '#00ff66');
-    visual.setAttribute('material', 'emissiveIntensity', 1.0);
-    visual.setAttribute('material', 'opacity', 0.9);
-    this.el.setAttribute('animation__confirm', {
-      property: 'scale', from: '1 1 1', to: '1.1 1.1 1.1',
-      dur: 300, dir: 'alternate', loop: 2, easing: 'easeInOutSine',
-    });
-    clearTimeout(this._greenTimer);
-    this._greenTimer = setTimeout(() => {
-      visual.setAttribute('material', 'color', '#aaffcc');
-      visual.setAttribute('material', 'emissive', '#00ff88');
-      visual.setAttribute('material', 'emissiveIntensity', 0.5);
-      visual.setAttribute('material', 'opacity', 0.4);
-    }, 10000); // 10 seconds
-  },
-
-  // Wrong item → RED flash for ~1.2s, then back to the zone's idle look.
-  flashRed: function () {
-    if (this.filled) return;
-    const visual = this.el.querySelector('.zone-visual');
-    if (!visual) return;
-    visual.setAttribute('material', 'color', '#ff6666');
-    visual.setAttribute('material', 'emissive', '#ff0000');
-    visual.setAttribute('material', 'emissiveIntensity', 1.0);
-    visual.setAttribute('material', 'opacity', 0.9);
-    clearTimeout(this._redTimer);
-    this._redTimer = setTimeout(() => this.leaveZone(), 1200);
   },
   remove: function () {
     this.el.removeEventListener('mouseenter', this.enterZone);
