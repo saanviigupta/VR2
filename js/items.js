@@ -13,28 +13,30 @@ window.addEventListener('DOMContentLoaded', () => {
   scene.addEventListener('loaded', () => {
     console.log('[items.js] scene loaded — building items');
 
-    // ── Item counts (only types that have a shelf zone) ─────────
+    // ── Item counts ─────────────────────────────────────────────
     const itemDefinitions = [
-      { type: 'croissant', emoji: '🥐', count: 3, zone: 'zone-croissant' },
-      { type: 'cupcake',   emoji: '🧁', count: 3, zone: 'zone-cupcake'   },
-      { type: 'donut',     emoji: '🍩', count: 3, zone: 'zone-donut'     },
-      { type: 'bread',     emoji: '🥖', count: 2, zone: 'zone-bread'     },
-      { type: 'pastry',    emoji: '🍰', count: 2, zone: 'zone-pastry'    },
-      { type: 'cookie',    emoji: '🍪', count: 2, zone: 'zone-cookie'    },
-      { type: 'macaron',   emoji: '🫐', count: 2, zone: 'zone-macaron'   },
-      { type: 'muffin',    emoji: '🧁', count: 2, zone: 'zone-muffin'    },
-      { type: 'brownie',   emoji: '🍫', count: 2, zone: 'zone-brownie'   },
+      { type: 'croissant',  emoji: '🥐', count: 5, zone: 'zone-croissant' },
+      { type: 'bread',      emoji: '🥖', count: 2, zone: 'zone-bread'     },
+      { type: 'pastry',     emoji: '🍰', count: 2, zone: 'zone-pastry'    },
+      { type: 'cupcake',    emoji: '🧁', count: 5, zone: 'zone-cupcake'   },
+      { type: 'cookie',     emoji: '🍪', count: 2, zone: 'zone-cookie'    },
+      { type: 'donut',      emoji: '🍩', count: 2, zone: 'zone-donut'     },
+      { type: 'macaron',    emoji: '🫐', count: 2, zone: 'zone-macaron'   },
+      { type: 'muffin',     emoji: '🧁', count: 2, zone: 'zone-muffin'    },
+      { type: 'brownie',    emoji: '🍫', count: 2, zone: 'zone-brownie'   },
+      { type: 'dirty-dish', emoji: '🍽', count: 2, zone: 'zone-sink'      },
+      { type: 'fork',       emoji: '🍴', count: 3, zone: 'zone-fork'      },
+      { type: 'spoon',      emoji: '🥄', count: 3, zone: 'zone-spoon'     },
     ];
 
-    // ── Spawn area: back-LEFT floor corner (a small cluster) ────
-    // Player only shuffles left↔right along the back to fetch these.
-    // Two floor patches give enough unique slots for all items.
+    // ── Spawn surfaces ──────────────────────────────────────────
     const surfaces = [
-      { y: 0.10, xMin: -2.75, xMax: -1.35, zMin: -3.15, zMax: -1.6 },
-      { y: 0.10, xMin: -1.30, xMax: -0.55, zMin: -3.15, zMax: -1.6 },
+      { y: 1.18, xMin: -2.1, xMax:  2.1, zMin: -1.88, zMax: -1.12 },
+      { y: 0.98, xMin: -2.8, xMax: -1.2, zMin:  0.1,  zMax:  0.9  },
+      { y: 0.06, xMin: -3.6, xMax: -1.0, zMin:  1.1,  zMax:  2.0  },
     ];
 
-    const SLOT_SPACING = 0.30;
+    const SLOT_SPACING = 0.44;
     const allSlots = [];
     for (const surf of surfaces) {
       const cols = Math.max(1, Math.floor((surf.xMax - surf.xMin) / SLOT_SPACING));
@@ -63,10 +65,61 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     // ── Drop zones ───────────────────────────────────────────────
-    // All 9 zones now live in index.html on the back shelf. Nothing to
-    // create here. Just normalize any zone label sizes.
+    const extraZones = [
+      { id: 'zone-cupcake', type: 'cupcake',  pos: '0 0.9 -5.25',     label: '🧁 Cupcakes'  },
+      { id: 'zone-cookie',  type: 'cookie',   pos: '-1.8 0.9 -5.25',  label: '🍪 Cookies'   },
+      { id: 'zone-donut',   type: 'donut',    pos: '1.8 0.9 -5.25',   label: '🍩 Donuts'    },
+      { id: 'zone-macaron', type: 'macaron',  pos: '-2.0 1.78 -5.35', label: '🫐 Macarons'  },
+      { id: 'zone-muffin',  type: 'muffin',   pos: '2.0 1.78 -5.35',  label: '🧁 Muffins'   },
+      { id: 'zone-brownie', type: 'brownie',  pos: '0 2.68 -5.35',    label: '🍫 Brownies'  },
+      { id: 'zone-fork',  type: 'fork',  pos: '5.77 2.08 -0.5', label: '🍴 Forks'  },
+      { id: 'zone-spoon', type: 'spoon', pos: '5.77 2.08 -1.5', label: '🥄 Spoons' },
+    ];
+
+    extraZones.forEach((z) => {
+      if (document.getElementById(z.id)) return;
+      const el = document.createElement('a-entity');
+      el.setAttribute('id', z.id);
+      el.setAttribute('class', 'drop-zone');
+      el.setAttribute('zone-type', z.type);
+      el.setAttribute('position', z.pos);
+      el.setAttribute('drop-zone', '');
+
+      // Invisible raycast-hit geometry on the parent so cursor/laser events
+      // fire on the .drop-zone entity (where the drop-zone component listens).
+      el.setAttribute('geometry', 'primitive: box; width: 0.8; height: 0.12; depth: 0.32');
+      el.setAttribute('material', 'opacity: 0; transparent: true; shader: flat');
+
+      const box = document.createElement('a-box');
+      box.setAttribute('width', '0.75');
+      box.setAttribute('height', '0.07');
+      box.setAttribute('depth', '0.28');
+      box.setAttribute('class', 'zone-visual');
+      box.setAttribute('material',
+        'color: #ffd0e8; opacity: 0.5; transparent: true; emissive: #ff80c0; emissiveIntensity: 0.45');
+      el.appendChild(box);
+
+      const txt = document.createElement('a-text');
+      txt.setAttribute('value', z.label);
+      txt.setAttribute('align', 'center');
+      txt.setAttribute('position', '0 0.22 0');
+      txt.setAttribute('width', '3.5');
+      txt.setAttribute('color', '#a0006a');
+      // Fork/spoon zones on the side wall need rotated text
+      if (z.pos.startsWith('5.77')) {
+        txt.setAttribute('rotation', '0 -90 0');
+        txt.setAttribute('position', '-0.3 0.22 0');
+      }
+      el.appendChild(txt);
+      scene.appendChild(el);
+    });
+
+    // Fix existing zone label sizes in HTML
     document.querySelectorAll('.drop-zone a-text').forEach((t) => {
-      t.setAttribute('width', '3');
+      t.setAttribute('width', '3.5');
+      if (!t.getAttribute('position') || t.getAttribute('position') === '0 0 0') {
+        t.setAttribute('position', '0 0.25 0');
+      }
     });
 
     // ── Visual builder (all designs unchanged) ──────────────────
