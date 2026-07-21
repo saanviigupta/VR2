@@ -129,7 +129,7 @@
 <a-scene
 
   background="color: #ffe4f3"
-  fog="type: linear; color: #ffe4f3; near: 12; far: 28"
+  fog="type: linear; color: #ffe4f3; near: 6; far: 16"
   vr-mode-ui="enabled: true"
   vr-mode-manager
   purple-grab
@@ -139,7 +139,7 @@
 
   <!-- ═══════════ CAMERA RIG + PLAYER ═══════════ -->
   <a-entity id="player"
-    position="0 0 3.5"
+    position="0 0 1.2"
     wasd-controls="acceleration: 25">
     <a-entity camera
       id="head"
@@ -181,59 +181,59 @@
        item-specific; if this block stops grabbing here, something in the
        game scene is cancelling the input system. -->
   <a-entity id="purple-test-block" class="interactable" item-type="purple-test"
-    pickupable position="0.55 1.1 2.9"
+    pickupable position="0.55 1.1 0.7"
 
 >
     <a-box depth="0.12" height="0.12" width="0.12"
       material="color: #aa44ff; emissive: #7722cc; emissiveIntensity: 0.3"></a-box>
   </a-entity>
   <a-text value="PURPLE TEST\nany button near it" align="center"
-    position="0.55 1.35 2.9" width="1.2" color="#cc99ff"></a-text>
+    position="0.55 1.35 0.7" width="1.2" color="#cc99ff"></a-text>
 
   <!-- ═══════════ LIGHTING ═══════════ -->
   <a-light type="ambient"     color="#ffe8f5" intensity="0.7"></a-light>
   <a-light type="directional" color="#fff0f8" intensity="0.6" position="2 4 2" cast-shadow="true"></a-light>
   <a-light type="point"       color="#ffb3d9" intensity="0.5" position="0 2.5 0" distance="8"></a-light>
-  <a-light type="point"       color="#fffde0" intensity="0.8" position="-4 3 -4" distance="10"></a-light>
+  <a-light type="point"       color="#fffde0" intensity="0.8" position="-2.4 3 -3.3" distance="8"></a-light>
 
   <!-- ═══════════ ROOM ═══════════ -->
 
   <!-- Floor — static physics body so items don't fall through -->
-  <a-plane position="0 0 0" rotation="-90 0 0" width="12" height="12"
+  <a-plane position="0 0 -1.5" rotation="-90 0 0" width="6" height="6"
     material="color: #ffd6ea; roughness: 0.8" shadow="receive: true"
 ></a-plane>
-  <a-plane position="0 0.001 0" rotation="-90 0 0" width="12" height="12"
+  <a-plane position="0 0.001 -1.5" rotation="-90 0 0" width="6" height="6"
     material="color: #ffadd4; wireframe: true; opacity: 0.15; shader: flat"></a-plane>
 
   <!-- Walls -->
-  <a-box position="0 2.5 -6"  width="12" height="5" depth="0.2"
+  <a-box position="0 2 -4.5"  width="6" height="4" depth="0.2"
     material="color: #fff0f8; roughness: 0.9"
 ></a-box>
-  <a-box position="-6 2.5 0"  width="0.2" height="5" depth="12"
+  <a-box position="-3 2 -1.5"  width="0.2" height="4" depth="6"
     material="color: #ffe8f5; roughness: 0.9"
 ></a-box>
-  <a-box position="6 2.5 0"   width="0.2" height="5" depth="12"
+  <a-box position="3 2 -1.5"   width="0.2" height="4" depth="6"
     material="color: #ffe8f5; roughness: 0.9"
 ></a-box>
-  <a-box position="0 5 0"     width="12" height="0.2" depth="12"
+  <a-box position="0 4 -1.5"     width="6" height="0.2" depth="6"
     material="color: #fff5fb; roughness: 0.9"></a-box>
 
   <!-- Ceiling lights -->
-  <a-box position="-2 4.85 -2" width="1.5" height="0.05" depth="1.5"
+  <a-box position="-1 3.85 -2.5" width="1.3" height="0.05" depth="1.3"
     material="color: #fff9e6; emissive: #fff9c4; emissiveIntensity: 0.6"></a-box>
-  <a-box position="2 4.85 -2"  width="1.5" height="0.05" depth="1.5"
+  <a-box position="1 3.85 -2.5"  width="1.3" height="0.05" depth="1.3"
     material="color: #fff9e6; emissive: #fff9c4; emissiveIntensity: 0.6"></a-box>
-  <a-light type="point" color="#fff8dc" intensity="0.4" position="-2 4.7 -2" distance="5"></a-light>
-  <a-light type="point" color="#fff8dc" intensity="0.4" position="2 4.7 -2"  distance="5"></a-light>
+  <a-light type="point" color="#fff8dc" intensity="0.4" position="-1 3.7 -2.5" distance="5"></a-light>
+  <a-light type="point" color="#fff8dc" intensity="0.4" position="1 3.7 -2.5"  distance="5"></a-light>
 
   <!-- Wainscoting -->
-  <a-box position="0 0.5 -5.89"  width="11.8" height="0.08" depth="0.05" material="color: #ffb3d9; roughness: 0.7"></a-box>
-  <a-box position="0 1.0 -5.89"  width="11.8" height="0.04" depth="0.05" material="color: #ff9ab5; roughness: 0.7"></a-box>
+  <a-box position="0 0.5 -4.39"  width="11.8" height="0.08" depth="0.05" material="color: #ffb3d9; roughness: 0.7"></a-box>
+  <a-box position="0 1.0 -4.39"  width="11.8" height="0.04" depth="0.05" material="color: #ff9ab5; roughness: 0.7"></a-box>
 
   <!-- ═══════════ FURNITURE (all static physics) ═══════════ -->
 
   <!-- Display Counter -->
-  <a-entity position="0 0 -1.5">
+  <a-entity position="0 0 -0.8">
     <a-box position="0 0.55 0"   width="5" height="1.1" depth="0.9"
       material="color: #f5c6d8; roughness: 0.6"
 ></a-box>
@@ -254,7 +254,7 @@
   </a-entity>
 
   <!-- Main Bakery Shelf (back wall) -->
-  <a-entity id="main-shelf" position="0 0 -5.7">
+  <a-entity id="main-shelf" position="0 0 -4.2">
     <a-box position="0 2.1 0"    width="5.5" height="4.2" depth="0.15" material="color: #f0b8cc; roughness: 0.7"
 ></a-box>
     <a-box position="0 0.8 0.15" width="5.2" height="0.08" depth="0.45" material="color: #e8a8bc; roughness: 0.6"
@@ -274,7 +274,7 @@
   </a-entity>
 
   <!-- Oven -->
-  <a-entity position="-4 0 -4.5">
+  <a-entity position="-2.4 0 -3.6">
     <a-box position="0 1.0 0"    width="1.6" height="2" depth="1.4"
       material="color: #f9d0e0; roughness: 0.5"
 ></a-box>
@@ -292,7 +292,7 @@
   </a-entity>
 
   <!-- Sink -->
-  <a-entity id="sink-entity" position="4.5 0 -4">
+  <a-entity id="sink-entity" position="2.4 0 -3.4">
     <a-box position="0 0.55 0"  width="1.8" height="1.1" depth="1.2"
       material="color: #f0c8dc; roughness: 0.6"
 ></a-box>
@@ -311,7 +311,7 @@
   </a-entity>
 
   <!-- Prep Table -->
-  <a-entity position="-2 0 0.5">
+  <a-entity position="-1.6 0 -0.2">
     <a-box position="0 0.9 0"  width="2" height="0.08" depth="1.2"
       material="color: #fce0ec; roughness: 0.5"
 ></a-box>
@@ -322,7 +322,7 @@
   </a-entity>
 
   <!-- Decoration Shelf (right wall) -->
-  <a-entity position="5.85 0 -1">
+  <a-entity position="2.85 0 -2">
     <a-box position="0 2.0 0"    width="0.15" height="3" depth="1.8"
       material="color: #f0b8cc; roughness: 0.7"
 ></a-box>
@@ -337,14 +337,14 @@
   <!-- ═══════════ AMBIENT DECOR ═══════════ -->
 
   <!-- Window -->
-  <a-box position="-2.5 2.5 -5.85" width="1.4" height="1.4" depth="0.1"  material="color: #b8eeff; opacity: 0.6; transparent: true; roughness: 0.1"></a-box>
-  <a-box position="-2.5 2.5 -5.85" width="1.5" height="1.5" depth="0.12" material="color: #f0b8cc; roughness: 0.5; opacity: 0.9"></a-box>
-  <a-box position="-2.5 2.5 -5.82" width="0.05" height="1.4" depth="0.05" material="color: #e090a8; roughness: 0.5"></a-box>
-  <a-box position="-2.5 2.5 -5.82" width="1.4" height="0.05" depth="0.05" material="color: #e090a8; roughness: 0.5"></a-box>
-  <a-light type="point" color="#fffde0" intensity="0.5" position="-2.5 2.5 -5.5" distance="4"></a-light>
+  <a-box position="-1.5 2.4 -4.39" width="1.4" height="1.4" depth="0.1"  material="color: #b8eeff; opacity: 0.6; transparent: true; roughness: 0.1"></a-box>
+  <a-box position="-1.5 2.4 -4.39" width="1.5" height="1.5" depth="0.12" material="color: #f0b8cc; roughness: 0.5; opacity: 0.9"></a-box>
+  <a-box position="-1.5 2.4 -4.36" width="0.05" height="1.4" depth="0.05" material="color: #e090a8; roughness: 0.5"></a-box>
+  <a-box position="-1.5 2.4 -4.36" width="1.4" height="0.05" depth="0.05" material="color: #e090a8; roughness: 0.5"></a-box>
+  <a-light type="point" color="#fffde0" intensity="0.5" position="-1.5 2.4 -4.1" distance="4"></a-light>
 
   <!-- Plant pots -->
-  <a-entity position="3 0 -5.5">
+  <a-entity position="1.6 0 -3.9">
     <a-cylinder position="0 0.25 0" radius="0.12" height="0.3"  material="color: #ffb3d9; roughness: 0.6"></a-cylinder>
     <a-sphere   position="0 0.55 0" radius="0.18"               material="color: #a8e8a0; roughness: 0.8"></a-sphere>
     <a-sphere   position="0.08 0.68 0.08" radius="0.1"          material="color: #c0f0b0; roughness: 0.8"></a-sphere>
@@ -352,16 +352,16 @@
 
   <!-- Floating sparkles -->
   <a-entity id="sparkles">
-    <a-sphere position="-1 2.5 -3"  radius="0.03" material="color: #ffdfff; emissive: #ffaaff; emissiveIntensity: 1" animation="property: position; to: -1 2.8 -3; dur: 2000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
-    <a-sphere position="1 3 -2"     radius="0.025" material="color: #ffffaa; emissive: #ffffaa; emissiveIntensity: 1" animation="property: position; to: 1 3.3 -2; dur: 2500; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
-    <a-sphere position="2.5 2.2 -4" radius="0.03" material="color: #ffd6ff; emissive: #ffaaff; emissiveIntensity: 1" animation="property: position; to: 2.5 2.6 -4; dur: 1800; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
-    <a-sphere position="-3 2.8 -1"  radius="0.02" material="color: #afffdd; emissive: #aaffcc; emissiveIntensity: 1" animation="property: position; to: -3 3.1 -1; dur: 3000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+    <a-sphere position="-1 2.3 -2.5"  radius="0.03" material="color: #ffdfff; emissive: #ffaaff; emissiveIntensity: 1" animation="property: position; to: -1 2.6 -2.5; dur: 2000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+    <a-sphere position="1 2.6 -2"     radius="0.025" material="color: #ffffaa; emissive: #ffffaa; emissiveIntensity: 1" animation="property: position; to: 1 2.9 -2; dur: 2500; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+    <a-sphere position="1.8 2.2 -3.2" radius="0.03" material="color: #ffd6ff; emissive: #ffaaff; emissiveIntensity: 1" animation="property: position; to: 1.8 2.6 -3.2; dur: 1800; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
+    <a-sphere position="-2 2.6 -1.2"  radius="0.02" material="color: #afffdd; emissive: #aaffcc; emissiveIntensity: 1" animation="property: position; to: -2 2.9 -1.2; dur: 3000; dir: alternate; loop: true; easing: easeInOutSine"></a-sphere>
   </a-entity>
 
   <!-- ═══════════ DROP ZONES ═══════════ -->
 
   <!-- 🥐 Croissants — shelf row 1 left -->
-  <a-entity id="zone-croissant" class="drop-zone" zone-type="croissant" position="-1.5 0.9 -5.48" drop-zone
+  <a-entity id="zone-croissant" class="drop-zone" zone-type="croissant" position="-1.5 0.9 -3.98" drop-zone
     geometry="primitive: box; width: 0.85; height: 0.12; depth: 0.35"
     material="opacity: 0; transparent: true; shader: flat">
     <a-box width="0.8" height="0.08" depth="0.3"
@@ -371,7 +371,7 @@
   </a-entity>
 
   <!-- 🍰 Pastries — shelf row 1 right -->
-  <a-entity id="zone-pastry" class="drop-zone" zone-type="pastry" position="1.5 0.9 -5.48" drop-zone
+  <a-entity id="zone-pastry" class="drop-zone" zone-type="pastry" position="1.5 0.9 -3.98" drop-zone
     geometry="primitive: box; width: 0.85; height: 0.12; depth: 0.35"
     material="opacity: 0; transparent: true; shader: flat">
     <a-box width="0.8" height="0.08" depth="0.3"
@@ -381,7 +381,7 @@
   </a-entity>
 
   <!-- 🍞 Bread — shelf row 2 centre -->
-  <a-entity id="zone-bread" class="drop-zone" zone-type="bread" position="0 1.78 -5.48" drop-zone
+  <a-entity id="zone-bread" class="drop-zone" zone-type="bread" position="0 1.78 -3.98" drop-zone
     geometry="primitive: box; width: 0.85; height: 0.12; depth: 0.35"
     material="opacity: 0; transparent: true; shader: flat">
     <a-box width="0.8" height="0.08" depth="0.3"
@@ -391,7 +391,7 @@
   </a-entity>
 
   <!-- 🧼 Sink washing zone -->
-  <a-entity id="zone-sink" class="drop-zone" zone-type="dirty-dish" position="4.5 1.05 -4" drop-zone
+  <a-entity id="zone-sink" class="drop-zone" zone-type="dirty-dish" position="2.4 1.05 -3.4" drop-zone
     geometry="primitive: box; width: 1.25; height: 0.1; depth: 0.75"
     material="opacity: 0; transparent: true; shader: flat">
     <a-box width="1.2" height="0.06" depth="0.7"
@@ -401,7 +401,7 @@
   </a-entity>
 
   <!-- 🎀 Decoration shelf (right wall) -->
-  <a-entity id="zone-deco" class="drop-zone" zone-type="decoration" position="5.77 3.08 -1" drop-zone
+  <a-entity id="zone-deco" class="drop-zone" zone-type="decoration" position="2.77 3.08 -2" drop-zone
     geometry="primitive: box; width: 0.12; height: 0.12; depth: 1.45"
     material="opacity: 0; transparent: true; shader: flat">
     <a-box width="0.08" height="0.08" depth="1.4"
