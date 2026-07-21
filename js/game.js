@@ -246,11 +246,8 @@ class BakeryGame {
       this.placeItemCorrectly(this.heldItem, zoneEl);
     } else {
       this._sfx('error');
-      const visual = zoneEl.querySelector('.zone-visual');
-      if (visual) {
-        visual.setAttribute('material', 'color', '#ff8888');
-        setTimeout(() => visual.setAttribute('material', 'color', '#ffd0e8'), 450);
-      }
+      const dz = zoneEl.components && zoneEl.components['drop-zone'];
+      if (dz && dz.flashRed) dz.flashRed();
     }
   }
 
@@ -275,7 +272,7 @@ class BakeryGame {
     // Freeze physics — item is now static at its placed location
     this._setPhysicsStatic(itemEl);
 
-    if (zoneEl.components['drop-zone']) zoneEl.components['drop-zone'].setFilled();
+    if (zoneEl.components['drop-zone']) zoneEl.components['drop-zone'].flashGreen();
 
     this.heldItem = null;
     this.holder   = null;
@@ -457,6 +454,49 @@ class BakeryGame {
     document.getElementById('completion-screen').style.display = 'flex';
     for (let i = 0; i < 25; i++) {
       setTimeout(() => this.spawnScreenSparkle(), i * 60);
+    }
+    this.throwConfetti();
+  }
+
+  // 3D confetti raining from the ceiling — visible inside VR (the 2D
+  // completion overlay isn't). ~120 colored bits fall + fade.
+  throwConfetti() {
+    const emitter = document.getElementById('confetti-emitter');
+    if (!emitter) return;
+    const colors = ['#ff5eae', '#ffd93d', '#6ce5ff', '#8dff9b', '#c98bff', '#ff9b54'];
+    for (let wave = 0; wave < 3; wave++) {
+      setTimeout(() => {
+        for (let i = 0; i < 40; i++) {
+          const bit = document.createElement('a-box');
+          const c = colors[Math.floor(Math.random() * colors.length)];
+          const sx = (Math.random() - 0.5) * 5;   // spread across the room
+          const sz = -0.5 + (Math.random() - 0.5) * 3;
+          const startY = 3.6 + Math.random() * 0.6;
+          const endY = 0.05;
+          const dur = 2200 + Math.random() * 1600;
+          bit.setAttribute('position', `${sx} ${startY} ${sz}`);
+          bit.setAttribute('width', '0.05');
+          bit.setAttribute('height', '0.05');
+          bit.setAttribute('depth', '0.02');
+          bit.setAttribute('material', `color: ${c}; emissive: ${c}; emissiveIntensity: 0.3; shader: flat`);
+          bit.setAttribute('animation__fall', {
+            property: 'position',
+            to: `${sx + (Math.random() - 0.5) * 1.5} ${endY} ${sz + (Math.random() - 0.5) * 1.5}`,
+            dur: dur, easing: 'easeInQuad',
+          });
+          bit.setAttribute('animation__spin', {
+            property: 'rotation',
+            to: `${Math.random() * 720} ${Math.random() * 720} ${Math.random() * 720}`,
+            dur: dur, easing: 'linear',
+          });
+          bit.setAttribute('animation__fade', {
+            property: 'material.opacity', from: 1, to: 0,
+            dur: dur, easing: 'easeInQuad',
+          });
+          emitter.appendChild(bit);
+          setTimeout(() => { try { emitter.removeChild(bit); } catch (e) {} }, dur + 200);
+        }
+      }, wave * 700);
     }
   }
 
