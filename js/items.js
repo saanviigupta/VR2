@@ -31,11 +31,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // ── Spawn surfaces ──────────────────────────────────────────
     const surfaces = [
-      { y: 0.10, xMin: -1.80, xMax: -0.30, zMin: -2.25, zMax: -1.05 },
-      { y: 0.30, xMin: -1.75, xMax: -0.55, zMin: -2.15, zMax: -1.25 },
+      { y: 1.18, xMin: -2.1, xMax:  2.1, zMin: -1.88, zMax: -1.12 },
+      { y: 0.98, xMin: -2.8, xMax: -1.2, zMin:  0.1,  zMax:  0.9  },
+      { y: 0.06, xMin: -3.6, xMax: -1.0, zMin:  1.1,  zMax:  2.0  },
     ];
 
-    const SLOT_SPACING = 0.28;
+    const SLOT_SPACING = 0.44;
     const allSlots = [];
     for (const surf of surfaces) {
       const cols = Math.max(1, Math.floor((surf.xMax - surf.xMin) / SLOT_SPACING));
@@ -65,14 +66,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // ── Drop zones ───────────────────────────────────────────────
     const extraZones = [
-      { id: 'zone-cupcake', type: 'cupcake',  pos: '0.4 0.82 -1.92',     label: '🧁 Cupcakes'  },
-      { id: 'zone-cookie',  type: 'cookie',   pos: '-0.9 1.47 -1.92',  label: '🍪 Cookies'   },
-      { id: 'zone-donut',   type: 'donut',    pos: '-0.4 0.82 -1.92',   label: '🍩 Donuts'    },
-      { id: 'zone-macaron', type: 'macaron',  pos: '-0.4 1.47 -1.92', label: '🫐 Macarons'  },
-      { id: 'zone-muffin',  type: 'muffin',   pos: '0.5 1.47 -1.92',  label: '🧁 Muffins'   },
-      { id: 'zone-brownie', type: 'brownie',  pos: '-0.9 2.12 -1.92',    label: '🍫 Brownies'  },
-      { id: 'zone-fork',  type: 'fork',  pos: '-0.4 2.12 -1.92', label: '🍴 Forks'  },
-      { id: 'zone-spoon', type: 'spoon', pos: '0.4 2.12 -1.92', label: '🥄 Spoons' },
+      { id: 'zone-cupcake', type: 'cupcake',  pos: '0 0.9 -5.25',     label: '🧁 Cupcakes'  },
+      { id: 'zone-cookie',  type: 'cookie',   pos: '-1.8 0.9 -5.25',  label: '🍪 Cookies'   },
+      { id: 'zone-donut',   type: 'donut',    pos: '1.8 0.9 -5.25',   label: '🍩 Donuts'    },
+      { id: 'zone-macaron', type: 'macaron',  pos: '-2.0 1.78 -5.35', label: '🫐 Macarons'  },
+      { id: 'zone-muffin',  type: 'muffin',   pos: '2.0 1.78 -5.35',  label: '🧁 Muffins'   },
+      { id: 'zone-brownie', type: 'brownie',  pos: '0 2.68 -5.35',    label: '🍫 Brownies'  },
+      { id: 'zone-fork',  type: 'fork',  pos: '5.77 2.08 -0.5', label: '🍴 Forks'  },
+      { id: 'zone-spoon', type: 'spoon', pos: '5.77 2.08 -1.5', label: '🥄 Spoons' },
     ];
 
     extraZones.forEach((z) => {
@@ -105,7 +106,7 @@ window.addEventListener('DOMContentLoaded', () => {
       txt.setAttribute('width', '3.5');
       txt.setAttribute('color', '#a0006a');
       // Fork/spoon zones on the side wall need rotated text
-      if (false) {
+      if (z.pos.startsWith('5.77')) {
         txt.setAttribute('rotation', '0 -90 0');
         txt.setAttribute('position', '-0.3 0.22 0');
       }
