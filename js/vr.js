@@ -60,6 +60,7 @@ function vrAttachTo(item, hand) {
 
   hand.object3D.attach(item.object3D);   // keeps world transform
   item.setAttribute('scale', '1.2 1.2 1.2');
+  try { if (window.bakeryAudio) window.bakeryAudio.play('pickup'); } catch (e) {}
   vrlog((item.getAttribute('item-type') || 'item') + ' GRABBED');
 }
 
@@ -218,6 +219,7 @@ AFRAME.registerComponent('purple-grab', {
 
       if (pressed && !this._was[hand]) {
         // Rising edge → grab nearest free item (grab-test mechanism)
+        try { if (window.bakeryAudio) window.bakeryAudio.start(); } catch (e) {}
         ent.object3D.getWorldPosition(this._p);
         vrlog('button on ' + hand);
         var item = vrNearest('.interactable', this._p, VR_GRAB_RADIUS, function (el) {
